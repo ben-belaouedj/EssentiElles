@@ -18,13 +18,14 @@ const NAV_ITEMS = [
 export default function AdminLayout() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout, initialized } = useAuthStore();
+  const { user, logout, isLoading, isAuthenticated } = useAuthStore();
+  const initialized = !isLoading;
 
   useEffect(() => {
-    if (initialized && (!user || user.role !== 'admin')) {
+    if (initialized && (!user || !isAuthenticated || user.role !== 'admin')) {
       router.replace('/(auth)/login' as any);
     }
-  }, [initialized, user]);
+  }, [initialized, user, isAuthenticated]);
 
   if (!initialized) {
     return (

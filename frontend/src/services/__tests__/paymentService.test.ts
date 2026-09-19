@@ -49,7 +49,12 @@ describe('paymentService', () => {
 
     const result = await checkoutCart(checkoutPayload);
 
-    expect(orderService.create).toHaveBeenCalledWith(checkoutPayload);
+    // Prices are computed server-side: only ids & quantities are sent.
+    expect(orderService.create).toHaveBeenCalledWith({
+      items: [{ productId: 'prod_1', quantity: 2 }],
+      addressId: 'addr_1',
+      notes: undefined,
+    });
     expect(result).toEqual({
       paymentMode: 'demo',
       order: { id: 'order_1', paymentStatus: 'paid' },

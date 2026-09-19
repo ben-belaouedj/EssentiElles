@@ -63,7 +63,7 @@ const GUIDE_CARDS: GuideCard[] = [
   {
     key: 'postpartum-routine',
     title: 'Routine postpartum',
-    description: 'Soulager, hydrater et s accorder un vrai temps calme.',
+    description: "Soulager, hydrater et s'accorder un vrai temps calme.",
     image: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=900&q=80',
   },
   {

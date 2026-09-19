@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,10 @@ export default function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [notifs, setNotifs] = useState(user?.preferences?.notifications ?? true);
   const [newsletter, setNewsletter] = useState(user?.preferences?.newsletter ?? true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const handleSave = async () => {
     setSaving(true);
@@ -30,6 +34,26 @@ export default function SettingsScreen() {
       Alert.alert('Erreur', err.message || 'Impossible de mettre à jour');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteError('');
+    if (!deletePassword) {
+      setDeleteError('Saisissez votre mot de passe pour confirmer');
+      return;
+    }
+    setDeleting(true);
+    try {
+      await authService.deleteAccount(deletePassword);
+      setShowDeleteModal(false);
+      await logout();
+      router.replace('/(auth)/login' as any);
+      Alert.alert('Compte supprimé', 'Votre compte et vos données personnelles ont été supprimés.');
+    } catch (err: any) {
+      setDeleteError(err.message || 'Impossible de supprimer le compte');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -87,14 +111,7 @@ export default function SettingsScreen() {
           <View style={styles.card}>
             <TouchableOpacity
               style={styles.dangerBtn}
-              onPress={() => Alert.alert(
-                'Supprimer le compte',
-                'Toutes vos données seront supprimées définitivement.',
-                [
-                  { text: 'Annuler', style: 'cancel' },
-                  { text: 'Supprimer', style: 'destructive', onPress: async () => { await logout(); router.replace('/(auth)/login' as any); } }
-                ]
-              )}
+              onPress={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteModal(true); }}
             >
               <Ionicons name="trash-outline" size={18} color={Colors.error} />
               <Text style={styles.dangerText}>Supprimer mon compte</Text>
@@ -102,6 +119,40 @@ export default function SettingsScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Delete account confirmation (GDPR) */}
+      <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconWrap}>
+              <Ionicons name="alert-outline" size={32} color={Colors.error} />
+            </View>
+            <Text style={styles.modalTitle}>Supprimer définitivement ?</Text>
+            <Text style={styles.modalSubtitle}>
+              Votre compte et toutes vos données personnelles (adresses, abonnements, demandes) seront
+              supprimés. Cette action est irréversible.
+            </Text>
+            <AppTextField
+              label="Confirmez avec votre mot de passe"
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              secureTextEntry
+              autoCapitalize="none"
+              icon="lock-closed-outline"
+              error={deleteError || undefined}
+            />
+            <PrimaryButton
+              label="Supprimer définitivement"
+              onPress={handleDeleteAccount}
+              loading={deleting}
+              style={{ marginTop: Spacing.sm, backgroundColor: Colors.error }}
+            />
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowDeleteModal(false)}>
+              <Text style={styles.modalCancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -120,4 +171,11 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: Colors.borderLight, marginVertical: 4 },
   dangerBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
   dangerText: { ...Typography.body, color: Colors.error },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
+  modalCard: { width: '100%', maxWidth: 420, backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.lg, ...Shadow.card },
+  modalIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: Colors.errorBg, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: Spacing.md },
+  modalTitle: { ...Typography.h4, color: Colors.textPrimary, textAlign: 'center' },
+  modalSubtitle: { ...Typography.bodySmall, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.sm, marginBottom: Spacing.md, lineHeight: 20 },
+  modalCancel: { marginTop: Spacing.md, alignSelf: 'center' },
+  modalCancelText: { ...Typography.body, color: Colors.primary, fontFamily: 'Poppins_500Medium' },
 });

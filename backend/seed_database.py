@@ -2,19 +2,21 @@
 """
 Script de remplissage de la base de données avec des données de démonstration
 """
+
 import asyncio
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+
+import bcrypt
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-import bcrypt
 
 # Load environment variables
 load_dotenv()
 
 # MongoDB connection
-mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017/')
-db_name = os.environ.get('DB_NAME', 'livrella')
+mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
+db_name = os.environ.get("DB_NAME", "livrella")
 
 print(f"📦 Connexion à MongoDB: {mongo_url}")
 print(f"📊 Base de données: {db_name}\n")
@@ -22,14 +24,14 @@ print(f"📊 Base de données: {db_name}\n")
 
 def hash_password(password: str) -> str:
     """Hash password with bcrypt"""
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 async def seed_database():
     """Seed the database with demo data"""
     client = AsyncIOMotorClient(mongo_url)
     db = client[db_name]
-    
+
     print("🗑️  Nettoyage de la base de données...")
     # Clear existing data
     await db.categories.delete_many({})
@@ -42,11 +44,11 @@ async def seed_database():
     await db.notifications.delete_many({})
     await db.support_tickets.delete_many({})
     await db.offers.delete_many({})
-    
+
     print("✅ Base de données nettoyée\n")
-    
+
     now = datetime.now(timezone.utc)
-    
+
     # ==================== CATEGORIES ====================
     print("📁 Création des catégories...")
     categories = [
@@ -59,7 +61,7 @@ async def seed_database():
             "color": "#FFCAD4",
             "isActive": True,
             "order": 1,
-            "createdAt": now
+            "createdAt": now,
         },
         {
             "name": "Bébé",
@@ -70,7 +72,7 @@ async def seed_database():
             "color": "#E8F5E9",
             "isActive": True,
             "order": 2,
-            "createdAt": now
+            "createdAt": now,
         },
         {
             "name": "Packs Mensuels",
@@ -81,7 +83,7 @@ async def seed_database():
             "color": "#F3E5F5",
             "isActive": True,
             "order": 3,
-            "createdAt": now
+            "createdAt": now,
         },
         {
             "name": "Promotions",
@@ -92,28 +94,40 @@ async def seed_database():
             "color": "#FFF3E0",
             "isActive": True,
             "order": 4,
-            "createdAt": now
+            "createdAt": now,
         },
     ]
-    
+
     result = await db.categories.insert_many(categories)
     cat_ids = {cat["slug"]: str(id) for cat, id in zip(categories, result.inserted_ids)}
     print(f"✅ {len(categories)} catégories créées\n")
-    
+
     # ==================== PRODUCTS ====================
     print("🛍️  Création des produits...")
-    
+
     # Images URLs (using Unsplash & Pexels for demo)
-    hygiene_img1 = "https://images.unsplash.com/photo-1764312270936-adb508140a6d?w=600&q=80"
-    hygiene_img2 = "https://images.unsplash.com/photo-1712677178403-a10c29e8797e?w=600&q=80"
-    hygiene_img3 = "https://images.unsplash.com/photo-1616680214084-22670de1bc82?w=600&q=80"
-    
-    baby_img1 = "https://images.unsplash.com/photo-1714350313517-ae7dadf0dc39?w=600&q=80"
-    baby_img2 = "https://images.pexels.com/photos/5889959/pexels-photo-5889959.jpeg?w=600"
-    baby_img3 = "https://images.pexels.com/photos/2225617/pexels-photo-2225617.jpeg?w=600"
-    
+    hygiene_img1 = (
+        "https://images.unsplash.com/photo-1764312270936-adb508140a6d?w=600&q=80"
+    )
+    hygiene_img2 = (
+        "https://images.unsplash.com/photo-1712677178403-a10c29e8797e?w=600&q=80"
+    )
+    hygiene_img3 = (
+        "https://images.unsplash.com/photo-1616680214084-22670de1bc82?w=600&q=80"
+    )
+
+    baby_img1 = (
+        "https://images.unsplash.com/photo-1714350313517-ae7dadf0dc39?w=600&q=80"
+    )
+    baby_img2 = (
+        "https://images.pexels.com/photos/5889959/pexels-photo-5889959.jpeg?w=600"
+    )
+    baby_img3 = (
+        "https://images.pexels.com/photos/2225617/pexels-photo-2225617.jpeg?w=600"
+    )
+
     pack_img = "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&q=80"
-    
+
     products = [
         # Hygiène féminine (6 produits)
         {
@@ -139,7 +153,7 @@ async def seed_database():
             "reviewCount": 234,
             "images": [hygiene_img1, hygiene_img2],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Protège-slips Quotidiens x50",
@@ -164,7 +178,7 @@ async def seed_database():
             "reviewCount": 189,
             "images": [hygiene_img3],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Tampons Normal x32",
@@ -189,7 +203,7 @@ async def seed_database():
             "reviewCount": 145,
             "images": [hygiene_img2],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Serviettes Regular Day",
@@ -214,7 +228,7 @@ async def seed_database():
             "reviewCount": 98,
             "images": [hygiene_img1],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Cups Menstruelles Taille M",
@@ -239,7 +253,7 @@ async def seed_database():
             "reviewCount": 312,
             "images": [hygiene_img3, hygiene_img2],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Lingettes Intimes Douces",
@@ -264,9 +278,8 @@ async def seed_database():
             "reviewCount": 67,
             "images": [hygiene_img1],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
-        
         # Bébé (8 produits)
         {
             "name": "Couches Taille 2 (3-6 kg)",
@@ -291,7 +304,7 @@ async def seed_database():
             "reviewCount": 567,
             "images": [baby_img1, baby_img2],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Lingettes Sensitive x288",
@@ -316,7 +329,7 @@ async def seed_database():
             "reviewCount": 423,
             "images": [baby_img2],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Couches Premium Taille 3 (4-9 kg)",
@@ -341,7 +354,7 @@ async def seed_database():
             "reviewCount": 312,
             "images": [baby_img1],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Crème Change Protectrice 100ml",
@@ -366,7 +379,7 @@ async def seed_database():
             "reviewCount": 178,
             "images": [baby_img3],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Couches Taille 4 (7-18 kg)",
@@ -391,7 +404,7 @@ async def seed_database():
             "reviewCount": 445,
             "images": [baby_img1, baby_img2],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Gel Lavant Doux Corps & Cheveux",
@@ -416,7 +429,7 @@ async def seed_database():
             "reviewCount": 123,
             "images": [baby_img3],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Lait Corps Hydratant Bébé",
@@ -441,7 +454,7 @@ async def seed_database():
             "reviewCount": 89,
             "images": [baby_img2],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Eau Nettoyante Sans Rinçage",
@@ -466,9 +479,8 @@ async def seed_database():
             "reviewCount": 156,
             "images": [baby_img3],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
-        
         # Packs mensuels (3 produits)
         {
             "name": "Pack Essentiel Femme",
@@ -493,7 +505,7 @@ async def seed_database():
             "reviewCount": 89,
             "images": [pack_img],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Pack Bébé Complet",
@@ -518,7 +530,7 @@ async def seed_database():
             "reviewCount": 156,
             "images": [pack_img],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Pack Hygiène Complète",
@@ -543,9 +555,8 @@ async def seed_database():
             "reviewCount": 67,
             "images": [pack_img],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
-        
         # Promotions (2 produits)
         {
             "name": "Lot 3 Serviettes Night PROMO",
@@ -570,7 +581,7 @@ async def seed_database():
             "reviewCount": 45,
             "images": [hygiene_img1],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
         {
             "name": "Pack Découverte Bébé",
@@ -595,14 +606,14 @@ async def seed_database():
             "reviewCount": 28,
             "images": [baby_img1],
             "createdAt": now,
-            "updatedAt": now
+            "updatedAt": now,
         },
     ]
-    
+
     result = await db.products.insert_many(products)
     product_ids = {p["name"]: str(id) for p, id in zip(products, result.inserted_ids)}
     print(f"✅ {len(products)} produits créés\n")
-    
+
     # ==================== OFFERS ====================
     print("🎁 Création des offres promotionnelles...")
     offers = [
@@ -616,7 +627,7 @@ async def seed_database():
             "color": "#FFCAD4",
             "isActive": True,
             "order": 1,
-            "createdAt": now
+            "createdAt": now,
         },
         {
             "title": "Livraison gratuite",
@@ -628,7 +639,7 @@ async def seed_database():
             "color": "#E8F5E9",
             "isActive": True,
             "order": 2,
-            "createdAt": now
+            "createdAt": now,
         },
         {
             "title": "3 mois = 1 mois offert",
@@ -640,16 +651,16 @@ async def seed_database():
             "color": "#F3E5F5",
             "isActive": True,
             "order": 3,
-            "createdAt": now
-        }
+            "createdAt": now,
+        },
     ]
-    
+
     await db.offers.insert_many(offers)
     print(f"✅ {len(offers)} offres créées\n")
-    
+
     # ==================== DEMO USER ====================
     print("👤 Création de l'utilisateur de démonstration...")
-    
+
     # Create demo user
     demo_user = {
         "email": "sarah@example.com",
@@ -661,17 +672,13 @@ async def seed_database():
         "isActive": True,
         "createdAt": now,
         "updatedAt": now,
-        "preferences": {
-            "notifications": True,
-            "newsletter": True,
-            "language": "fr"
-        }
+        "preferences": {"notifications": True, "newsletter": True, "language": "fr"},
     }
-    
+
     user_result = await db.users.insert_one(demo_user)
     user_id = str(user_result.inserted_id)
     print(f"✅ Utilisateur créé: sarah@example.com / password123\n")
-    
+
     # Create demo address
     print("📍 Création de l'adresse de démonstration...")
     address = {
@@ -685,13 +692,13 @@ async def seed_database():
         "country": "France",
         "phone": "+33 6 12 34 56 78",
         "isDefault": True,
-        "createdAt": now
+        "createdAt": now,
     }
-    
+
     addr_result = await db.addresses.insert_one(address)
     addr_id = str(addr_result.inserted_id)
     print(f"✅ Adresse créée\n")
-    
+
     # Create demo subscription
     print("📦 Création d'un abonnement de démonstration...")
     pampers_id = product_ids.get("Couches Taille 2 (3-6 kg)")
@@ -711,31 +718,33 @@ async def seed_database():
             "autoRenew": True,
             "deliveryCount": 3,
             "createdAt": now - timedelta(days=90),
-            "updatedAt": now
+            "updatedAt": now,
         }
-        
+
         sub_result = await db.subscriptions.insert_one(subscription)
         print(f"✅ Abonnement créé\n")
-        
+
         # Create demo orders
         print("📦 Création de commandes de démonstration...")
         for i in range(3):
             order_date = now - timedelta(days=30 * i)
             status = "delivered" if i > 0 else "shipped"
             tracking = f"FR{1234567890 + i}ZZ" if i <= 1 else None
-            
+
             order = {
                 "orderNumber": f"ESS-2026-{10001 + i}",
                 "userId": user_id,
                 "subscriptionId": str(sub_result.inserted_id),
                 "addressId": addr_id,
-                "items": [{
-                    "productId": pampers_id,
-                    "productName": "Couches Taille 2 (3-6 kg)",
-                    "quantity": 2,
-                    "unitPrice": 18.99,
-                    "totalPrice": 37.98
-                }],
+                "items": [
+                    {
+                        "productId": pampers_id,
+                        "productName": "Couches Taille 2 (3-6 kg)",
+                        "quantity": 2,
+                        "unitPrice": 18.99,
+                        "totalPrice": 37.98,
+                    }
+                ],
                 "subtotal": 37.98,
                 "deliveryFee": 0,
                 "discount": 0,
@@ -744,17 +753,40 @@ async def seed_database():
                 "trackingNumber": tracking,
                 "estimatedDelivery": order_date + timedelta(days=3),
                 "timeline": [
-                    {"status": "confirmed", "date": order_date.isoformat(), "description": "Commande confirmée"},
-                    {"status": "preparing", "date": (order_date + timedelta(hours=6)).isoformat(), "description": "En cours de préparation"},
-                    {"status": "shipped", "date": (order_date + timedelta(days=1)).isoformat(), "description": "Expédiée"},
-                ] + ([{"status": "delivered", "date": (order_date + timedelta(days=3)).isoformat(), "description": "Livrée"}] if status == "delivered" else []),
+                    {
+                        "status": "confirmed",
+                        "date": order_date.isoformat(),
+                        "description": "Commande confirmée",
+                    },
+                    {
+                        "status": "preparing",
+                        "date": (order_date + timedelta(hours=6)).isoformat(),
+                        "description": "En cours de préparation",
+                    },
+                    {
+                        "status": "shipped",
+                        "date": (order_date + timedelta(days=1)).isoformat(),
+                        "description": "Expédiée",
+                    },
+                ]
+                + (
+                    [
+                        {
+                            "status": "delivered",
+                            "date": (order_date + timedelta(days=3)).isoformat(),
+                            "description": "Livrée",
+                        }
+                    ]
+                    if status == "delivered"
+                    else []
+                ),
                 "paymentStatus": "paid",
                 "createdAt": order_date,
-                "updatedAt": order_date
+                "updatedAt": order_date,
             }
-            
+
             order_result = await db.orders.insert_one(order)
-            
+
             # Create invoice
             invoice = {
                 "invoiceNumber": f"INV-2026-{10001 + i}",
@@ -767,13 +799,13 @@ async def seed_database():
                 "status": "paid",
                 "dueDate": order_date,
                 "paidAt": order_date,
-                "createdAt": order_date
+                "createdAt": order_date,
             }
-            
+
             await db.invoices.insert_one(invoice)
-        
+
         print(f"✅ 3 commandes et factures créées\n")
-    
+
     # Create demo notification
     print("🔔 Création de notifications de démonstration...")
     notifications = [
@@ -783,15 +815,16 @@ async def seed_database():
             "title": "Votre commande arrive demain ! 📦",
             "body": "Votre commande ESS-2026-10001 sera livrée demain entre 9h et 18h.",
             "isRead": False,
-            "createdAt": now - timedelta(hours=12)
+            "createdAt": now - timedelta(hours=12),
         },
         {
             "userId": user_id,
             "type": "subscription",
             "title": "Prochaine livraison dans 5 jours",
-            "body": "Votre abonnement mensuel sera renouvelé le " + (now + timedelta(days=5)).strftime("%d/%m/%Y"),
+            "body": "Votre abonnement mensuel sera renouvelé le "
+            + (now + timedelta(days=5)).strftime("%d/%m/%Y"),
             "isRead": False,
-            "createdAt": now - timedelta(days=1)
+            "createdAt": now - timedelta(days=1),
         },
         {
             "userId": user_id,
@@ -799,13 +832,13 @@ async def seed_database():
             "title": "🎁 Offre spéciale : -20%",
             "body": "Profitez de 20% de réduction sur tous les packs mensuels ce week-end !",
             "isRead": True,
-            "createdAt": now - timedelta(days=3)
-        }
+            "createdAt": now - timedelta(days=3),
+        },
     ]
-    
+
     await db.notifications.insert_many(notifications)
     print(f"✅ {len(notifications)} notifications créées\n")
-    
+
     # Create demo support ticket
     print("🎫 Création d'un ticket de support de démonstration...")
     ticket = {
@@ -819,24 +852,24 @@ async def seed_database():
             {
                 "sender": "customer",
                 "message": "Bonjour, je souhaiterais passer mon abonnement de mensuel à bi-hebdomadaire. Comment puis-je faire ?",
-                "createdAt": (now - timedelta(hours=2)).isoformat()
+                "createdAt": (now - timedelta(hours=2)).isoformat(),
             },
             {
                 "sender": "support",
                 "message": "Bonjour Sarah ! Vous pouvez modifier la fréquence de votre abonnement directement depuis l'application : Mes abonnements > Modifier. Nous restons à votre disposition si besoin.",
-                "createdAt": (now - timedelta(hours=1)).isoformat()
-            }
+                "createdAt": (now - timedelta(hours=1)).isoformat(),
+            },
         ],
         "assignedTo": None,
         "resolvedAt": None,
         "satisfactionRating": None,
         "createdAt": now - timedelta(hours=2),
-        "updatedAt": now - timedelta(hours=1)
+        "updatedAt": now - timedelta(hours=1),
     }
-    
+
     await db.support_tickets.insert_one(ticket)
     print(f"✅ Ticket de support créé\n")
-    
+
     # Create indexes
     print("🔧 Création des index de base de données...")
     await db.users.create_index("email", unique=True)
@@ -846,7 +879,7 @@ async def seed_database():
     await db.subscriptions.create_index("userId")
     await db.addresses.create_index("userId")
     print("✅ Index créés\n")
-    
+
     print("=" * 60)
     print("🎉 BASE DE DONNÉES REMPLIE AVEC SUCCÈS !")
     print("=" * 60)
@@ -865,7 +898,7 @@ async def seed_database():
     print("   Admin:  admin@livrella.com / Admin2026!")
     print("   Demo:   sarah@example.com / password123")
     print("\n✅ Vous pouvez maintenant démarrer l'application!\n")
-    
+
     client.close()
 
 

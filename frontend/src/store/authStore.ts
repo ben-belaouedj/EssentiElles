@@ -38,16 +38,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+    try {
+      await AsyncStorage.removeMany([TOKEN_KEY, USER_KEY]);
+    } catch {
+      await AsyncStorage.removeItem(TOKEN_KEY);
+      await AsyncStorage.removeItem(USER_KEY);
+    }
     set({ token: null, user: null, isAuthenticated: false });
   },
 
   initialize: async () => {
     try {
-      const [token, userStr, lang] = await AsyncStorage.multiGet([TOKEN_KEY, USER_KEY, LANG_KEY]);
-      const savedToken = token[1];
-      const savedUser = userStr[1];
-      const savedLang = lang[1] as 'fr' | 'en' | null;
+      const stored = await AsyncStorage.getMany([TOKEN_KEY, USER_KEY, LANG_KEY]);
+      const savedToken = stored[TOKEN_KEY];
+      const savedUser = stored[USER_KEY];
+      const savedLang = (stored[LANG_KEY] as 'fr' | 'en' | null) ?? null;
       if (savedToken && savedUser) {
         set({
           token: savedToken,

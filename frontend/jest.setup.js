@@ -1,8 +1,6 @@
-import '@testing-library/jest-native/extend-expect';
-
-// Mock AsyncStorage
+// Mock AsyncStorage (v3 API: getMany/setMany/removeMany)
 jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+  require('@react-native-async-storage/async-storage/jest')
 );
 
 // Mock expo-constants
@@ -14,10 +12,7 @@ jest.mock('expo-constants', () => ({
   },
 }));
 
-// Silence the warning: Animated: `useNativeDriver` is not supported
-jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper');
-
-// Mock react-native-reanimated
+// Mock react-native-reanimated (not needed for unit tests)
 jest.mock('react-native-reanimated', () => {
   const Reanimated = require('react-native-reanimated/mock');
   Reanimated.default.call = () => {};

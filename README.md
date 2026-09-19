@@ -74,13 +74,12 @@ EssentiElles (Livrella) est une application mobile e-commerce moderne développ�
 ```
 EssentiElles/
 ├── backend/                    # API FastAPI
-│   ├── server.py              # Application principale
-│   ├── middleware.py          # Security & rate limiting
+│   ├── server.py              # Application principale (+ health checks, static web)
+│   ├── middleware.py          # Security headers, logging & rate limiting
 │   ├── validators.py          # Input validation
-│   ├── health.py              # Health checks
 │   ├── requirements.txt       # Python dependencies
 │   ├── Dockerfile            # Docker image
-│   └── tests/                # Backend tests
+│   └── tests/                # Backend tests (in-memory DB)
 │
 ├── frontend/                  # Application React Native
 │   ├── app/                  # Expo Router screens
@@ -120,11 +119,28 @@ EssentiElles/
 
 ### Prérequis
 
-- **Node.js** 20+ et Yarn
+- **Node.js** 20+ et npm
 - **Python** 3.11+
-- **MongoDB** 7.0+
+- **MongoDB** 7.0+ *(optionnel en dev — voir mode mémoire ci-dessous)*
 - **Docker** & Docker Compose (optionnel)
-- **Expo CLI** (`npm install -g expo-cli`)
+
+### 🚀 Démarrage le plus rapide (sans MongoDB)
+
+Le backend peut tourner avec une base **en mémoire embarquée** (aucune installation requise) — parfait pour tester/démo :
+
+```bash
+git clone https://github.com/ben3100/EssentiElles.git
+cd EssentiElles
+
+# Backend
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+DB_BACKEND=memory SEED_DEMO_DATA=true uvicorn server:app --reload
+```
+
+Compte de démo auto-créé : **sarah@example.com / password123**
+Admin : **admin@livrella.com / Admin2026!**
 
 ### Installation Rapide avec Docker
 
@@ -174,59 +190,61 @@ uvicorn server:app --reload --host 0.0.0.0 --port 8000
 cd frontend
 
 # Installer les dépendances
-yarn install
+npm install
 
 # Copier le fichier d'environnement
 cp .env.example .env
 
 # Lancer l'app en développement
-yarn start
+npm start
 
-# Ou directement sur Android/iOS
-yarn android
-yarn ios
+# Ou directement sur Android/iOS/web
+npm run android
+npm run ios
+npm run web
+```
+
+#### 🌐 Déployer l'app web et l'API sur un seul domaine
+
+Le backend sait servir l'export web statique Expo — une seule origine, zéro souci CORS :
+
+```bash
+cd frontend
+EXPO_PUBLIC_BACKEND_URL=/api npm run build:web   # génère frontend/dist/
+
+cd ../backend
+WEB_DIST_DIR=/chemin/vers/frontend/dist uvicorn server:app --host 0.0.0.0 --port 8000
+# → http://localhost:8000 sert la boutique web + /api/*
 ```
 
 ## ⚙️ Configuration
 
 ### Variables d'Environnement Backend
 
-```bash
-# Database
-MONGO_URL=mongodb://localhost:27017/
-DB_NAME=livrella
+Voir [.env.example](.env.example) pour la liste complète commentée. Principales :
 
-# JWT
-JWT_SECRET=your_super_secret_key_change_this
-JWT_ALGORITHM=HS256
-JWT_EXPIRY_DAYS=30
-
-# Application
-ENVIRONMENT=development
-LOG_LEVEL=info
-
-# Payment (Stripe)
-STRIPE_SECRET_KEY=sk_test_xxx
-STRIPE_WEBHOOK_SECRET=whsec_xxx
-```
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `DB_BACKEND` | `mongodb` | `mongodb` (prod) ou `memory` (dev/tests sans serveur) |
+| `MONGO_URL` / `DB_NAME` | — | Connexion MongoDB (requis si `DB_BACKEND=mongodb`) |
+| `JWT_SECRET` | **requis en prod** | Clé de signature des tokens (`openssl rand -hex 32`) |
+| `ENVIRONMENT` | `development` | `development` ou `production` |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Compte admin créé au 1er démarrage |
+| `CORS_ORIGINS` | `*` | Origines autorisées (CSV) — à restreindre en prod |
+| `RATE_LIMIT_PER_MINUTE` | `240` | Limite de requêtes / IP (`0` = désactivé) |
+| `SEED_DEMO_DATA` | `true` hors prod | Catalogue + compte démo au démarrage |
+| `WEB_DIST_DIR` | — | Dossier de l'export web Expo à servir sur `/` |
+| `STRIPE_SECRET_KEY` | — | Active le mode paiement Stripe (sinon : démo) |
 
 ### Variables d'Environnement Frontend
 
-```bash
-# API
-EXPO_PUBLIC_BACKEND_URL=http://localhost:8000
-API_TIMEOUT=30000
+Voir [frontend/.env.example](frontend/.env.example). Principales :
 
-# Checkout
-EXPO_PUBLIC_PAYMENT_MODE=demo
-
-# Features
-ENABLE_ANALYTICS=false
-ENABLE_PUSH_NOTIFICATIONS=false
-
-# Stripe
-STRIPE_PUBLISHABLE_KEY=pk_test_xxx
-```
+| Variable | Rôle |
+|---|---|
+| `EXPO_PUBLIC_BACKEND_URL` | URL de l'API (`http://localhost:8000`, ou `/api` en single-origin) |
+| `EXPO_PUBLIC_PAYMENT_MODE` | `demo` ou `stripe` |
+| `STRIPE_PUBLISHABLE_KEY` | Clé publique Stripe (si mode stripe) |
 
 ## 🛠️ Développement
 
@@ -235,12 +253,12 @@ STRIPE_PUBLISHABLE_KEY=pk_test_xxx
 ```bash
 # Backend (Terminal 1)
 cd backend
-source venv/bin/activate
-uvicorn server:app --reload
+source .venv/bin/activate
+DB_BACKEND=memory uvicorn server:app --reload
 
 # Frontend (Terminal 2)
 cd frontend
-yarn start
+npm start
 ```
 
 ### Linting & Formatting
@@ -255,8 +273,8 @@ mypy .                     # Type check
 
 # Frontend
 cd frontend
-yarn lint                  # ESLint
-yarn tsc --noEmit          # TypeScript check
+npm run lint               # ESLint
+npm run typecheck          # TypeScript check
 ```
 
 ### Structure du Code
@@ -279,8 +297,11 @@ yarn tsc --noEmit          # TypeScript check
 
 ### Backend Tests
 
+Les tests tournent sur une base **en mémoire embarquée** — aucune installation MongoDB nécessaire :
+
 ```bash
 cd backend
+source .venv/bin/activate
 
 # Lancer tous les tests
 pytest
@@ -289,7 +310,7 @@ pytest
 pytest --cov=. --cov-report=html
 
 # Tests spécifiques
-pytest tests/test_health.py -v
+pytest tests/test_api.py -v
 ```
 
 ### Frontend Tests
@@ -298,13 +319,13 @@ pytest tests/test_health.py -v
 cd frontend
 
 # Lancer les tests
-yarn test
+npm test
 
 # Avec coverage
-yarn test --coverage
+npm test -- --coverage
 
 # Mode watch
-yarn test --watch
+npm test -- --watch
 ```
 
 ### Tests d'Intégration
@@ -314,7 +335,7 @@ yarn test --watch
 docker-compose -f docker-compose.test.yml up -d
 
 # Lancer les tests E2E
-yarn test:e2e
+npm run test:e2e
 ```
 
 ## 📦 Déploiement
@@ -374,7 +395,9 @@ La documentation API interactive est disponible:
 #### Authentification
 - `POST /api/auth/register` - Inscription
 - `POST /api/auth/login` - Connexion
-- `POST /api/auth/forgot-password` - Mot de passe oublié
+- `POST /api/auth/forgot-password` - Demander un code de réinitialisation
+- `POST /api/auth/reset-password` - Réinitialiser avec le code
+- `DELETE /api/auth/me` - Suppression de compte (RGPD)
 
 #### Produits
 - `GET /api/products` - Liste des produits
@@ -389,20 +412,28 @@ La documentation API interactive est disponible:
 #### Abonnements
 - `POST /api/subscriptions` - Créer un abonnement
 - `GET /api/subscriptions` - Mes abonnements
-- `PATCH /api/subscriptions/{id}` - Modifier un abonnement
+- `PUT /api/subscriptions/{id}` - Modifier un abonnement
+
+#### Paiements
+- `GET /api/payments/config` - Mode de paiement actif (demo/stripe)
+- `POST /api/payments/create-intent` - PaymentIntent Stripe (montant serveur)
 
 ## 🔒 Sécurité
 
 ### Mesures Implémentées
 
 - ✅ **JWT Authentication** avec expiration
-- ✅ **Password hashing** (bcrypt)
-- ✅ **Rate limiting** (60 req/min par IP)
+- ✅ **Password hashing** (bcrypt) + politique de mot de passe fort
+- ✅ **Prix calculés côté serveur** — le client n'envoie que produit + quantité (impossible de frauder les prix)
+- ✅ **Stock réservé atomiquement** à chaque commande/abonnement
+- ✅ **Adresses vérifiées** — une commande ne peut partir que vers une adresse du client
+- ✅ **Rate limiting** (configurable, 240 req/min par IP par défaut)
 - ✅ **Input validation** & sanitization
-- ✅ **CORS** configuré
+- ✅ **CORS** configurable par variable d'environnement
 - ✅ **Security headers** (CSP, HSTS, X-Frame-Options)
-- ✅ **SQL injection protection** (MongoDB parameterized queries)
-- ✅ **XSS protection** (input sanitization)
+- ✅ **Injection protection** (requêtes MongoDB paramétrées)
+- ✅ **Réinitialisation de mot de passe** par code à 6 chiffres expirant (hashé en base)
+- ✅ **Suppression de compte RGPD** avec anonymisation des commandes
 
 ### Rapporter une Vulnérabilité
 

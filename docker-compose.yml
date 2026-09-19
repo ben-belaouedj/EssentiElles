@@ -10,11 +10,20 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - DB_BACKEND=${DB_BACKEND:-mongodb}
       - MONGO_URL=${MONGO_URL}
       - DB_NAME=${DB_NAME}
       - JWT_SECRET=${JWT_SECRET}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@livrella.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-240}
+      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-false}
+      - WEB_DIST_DIR=${WEB_DIST_DIR:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
     volumes:
       - ./backend:/app
       - backend_logs:/app/logs

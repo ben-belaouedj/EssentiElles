@@ -22,7 +22,7 @@ install:
 	@echo "Installing backend dependencies..."
 	cd backend && pip install -r requirements.txt
 	@echo "Installing frontend dependencies..."
-	cd frontend && yarn install
+	cd frontend && npm install
 	@echo "✅ Installation complete!"
 
 # Start development servers
@@ -36,14 +36,14 @@ dev-backend:
 	cd backend && uvicorn server:app --reload --host 0.0.0.0 --port 8000
 
 dev-frontend:
-	cd frontend && yarn start
+	cd frontend && npm start
 
 # Run tests
 test:
 	@echo "Running backend tests..."
 	cd backend && pytest --cov=. --cov-report=term
 	@echo "Running frontend tests..."
-	cd frontend && yarn test --coverage
+	cd frontend && npm test -- --coverage
 	@echo "✅ All tests passed!"
 
 # Run linters and formatters
@@ -51,7 +51,7 @@ lint:
 	@echo "Linting backend..."
 	cd backend && black . && isort . && flake8 . && mypy .
 	@echo "Linting frontend..."
-	cd frontend && yarn lint && yarn tsc --noEmit
+	cd frontend && npm run lint && npm run typecheck
 	@echo "✅ Linting complete!"
 
 # Format code

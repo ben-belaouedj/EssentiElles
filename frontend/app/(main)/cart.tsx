@@ -19,7 +19,7 @@ import { t } from '../../src/constants/strings';
 
 export default function CartScreen() {
   const router = useRouter();
-  const { items, updateQuantity, clearCart, total, itemCount } = useCartStore();
+  const { items, updateQuantity, clearCart, total, savingsIfSubscribed, itemCount } = useCartStore();
   const [step, setStep] = useState<'cart' | 'checkout' | 'confirmation'>('cart');
   const [ordering, setOrdering] = useState(false);
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -40,7 +40,7 @@ export default function CartScreen() {
           'Adresse requise',
           'Veuillez d\'abord ajouter une adresse de livraison',
           [
-            { text: 'Ajouter', onPress: () => router.push('/(main)/profile/addresses' as any) },
+            { text: 'Ajouter', onPress: () => router.push('/(main)/addresses' as any) },
             { text: 'Annuler' }
           ]
         );
@@ -70,8 +70,8 @@ export default function CartScreen() {
         productId: i.product.id,
         productName: i.product.name,
         quantity: i.quantity,
-        unitPrice: i.product.subscriptionPrice,
-        totalPrice: i.product.subscriptionPrice * i.quantity,
+        unitPrice: i.product.price,
+        totalPrice: i.product.price * i.quantity,
       }));
       const result = await checkoutCart({
         items: orderItems,
@@ -257,7 +257,8 @@ export default function CartScreen() {
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.brand}>{item.product.brand}</Text>
                 <Text style={styles.name} numberOfLines={2}>{item.product.name}</Text>
-                <Text style={styles.price}>{item.product.subscriptionPrice.toFixed(2)} €/unité</Text>
+                <Text style={styles.price}>{item.product.price.toFixed(2)} €/unité</Text>
+                <Text style={styles.subscriberHint}>{item.product.subscriptionPrice.toFixed(2)} € pour les abonnés</Text>
               </View>
             </View>
             <View style={styles.qtyRow}>
@@ -274,7 +275,7 @@ export default function CartScreen() {
               >
                 <Ionicons name="add" size={16} color={Colors.primary} />
               </TouchableOpacity>
-              <Text style={styles.lineTotal}>{(item.product.subscriptionPrice * item.quantity).toFixed(2)} €</Text>
+              <Text style={styles.lineTotal}>{(item.product.price * item.quantity).toFixed(2)} €</Text>
             </View>
           </View>
         )}
@@ -292,6 +293,14 @@ export default function CartScreen() {
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>{total().toFixed(2)} €</Text>
             </View>
+            {savingsIfSubscribed() > 0 && (
+              <View style={styles.savingsBanner}>
+                <Ionicons name="pricetag-outline" size={14} color={Colors.primaryDark} />
+                <Text style={styles.savingsBannerText}>
+                  Économisez {savingsIfSubscribed().toFixed(2)} € avec un abonnement
+                </Text>
+              </View>
+            )}
             {isDemoMode && (
               <View style={styles.demoBadge}>
                 <Ionicons name="flask-outline" size={14} color={Colors.info} />
@@ -323,6 +332,13 @@ const styles = StyleSheet.create({
   brand: { fontSize: 10, color: Colors.textTertiary, fontFamily: 'Poppins_500Medium', textTransform: 'uppercase' },
   name: { ...Typography.bodySmall, color: Colors.textPrimary, fontFamily: 'Poppins_600SemiBold', marginTop: 2 },
   price: { fontSize: 13, color: Colors.primary, fontFamily: 'Poppins_600SemiBold', marginTop: 4 },
+  subscriberHint: { fontSize: 11, color: Colors.accent, fontFamily: 'Poppins_500Medium', marginTop: 2 },
+  savingsBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.accentMuted, borderRadius: BorderRadius.md,
+    paddingHorizontal: 12, paddingVertical: 10, marginTop: Spacing.sm,
+  },
+  savingsBannerText: { flex: 1, fontSize: 12, color: Colors.primaryDark, fontFamily: 'Poppins_500Medium' },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   qtyBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center' },
   qtyVal: { fontSize: 16, fontFamily: 'Poppins_700Bold', color: Colors.textPrimary, minWidth: 24, textAlign: 'center' },

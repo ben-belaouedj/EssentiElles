@@ -16,6 +16,12 @@ export function resolveApiBaseUrl(rawUrl?: string | null): string {
     return FALLBACK_API_BASE_URL;
   }
 
+  // Same-origin deployment (e.g. web build served by the API itself):
+  // a relative value like "/api" is used as-is.
+  if (normalized.startsWith('/')) {
+    return normalized;
+  }
+
   return normalized.endsWith(API_PATH_SUFFIX)
     ? normalized
     : `${normalized}${API_PATH_SUFFIX}`;

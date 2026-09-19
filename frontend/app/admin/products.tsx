@@ -36,25 +36,10 @@ export default function AdminProducts() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const [prodRes, catRes] = await Promise.all([
-        adminService.getCategories(),
-        adminService.getCategories(),
-      ]);
-      const pRes = await fetch('/api/products?limit=100', { headers: { Authorization: `Bearer ${require('../../src/services/api').getToken()}` } }).then(r => r.json()).catch(() => ({ products: [] }));
-      // Use admin endpoint
-      const allProds = await import('../../src/services/api').then(m => m.productService.getAll({}));
-      setProducts(allProds.data.products || allProds.data || []);
-      setCategories(catRes.data);
-    } catch {} finally { setLoading(false); setRefreshing(false); }
-  }, []);
-
-  // Simpler load
   const loadData = useCallback(async () => {
     try {
       const [prodRes, catRes] = await Promise.allSettled([
-        import('../../src/services/api').then(m => m.productService.getAll({})),
+        adminService.getAllProducts(),
         adminService.getCategories(),
       ]);
       if (prodRes.status === 'fulfilled') {

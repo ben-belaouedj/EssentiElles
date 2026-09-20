@@ -3,9 +3,9 @@
  */
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
+import { getApiBaseUrl } from '../constants/api';
 
-const API_URL = process.env.API_URL || 'http://localhost:8000/api';
+const API_URL = getApiBaseUrl();
 const API_TIMEOUT = 30000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;

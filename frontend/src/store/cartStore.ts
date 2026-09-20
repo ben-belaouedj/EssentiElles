@@ -8,6 +8,7 @@ interface CartState {
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   total: () => number;
+  savingsIfSubscribed: () => number;
   itemCount: () => number;
 }
 
@@ -48,8 +49,17 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   clearCart: () => set({ items: [] }),
 
+  // One-time purchases are billed at the regular catalog price —
+  // the subscription price is reserved for subscribers (that's the discount).
   total: () => {
-    return get().items.reduce((sum, item) => sum + item.product.subscriptionPrice * item.quantity, 0);
+    return get().items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  },
+
+  savingsIfSubscribed: () => {
+    return get().items.reduce(
+      (sum, item) => sum + (item.product.price - item.product.subscriptionPrice) * item.quantity,
+      0,
+    );
   },
 
   itemCount: () => {

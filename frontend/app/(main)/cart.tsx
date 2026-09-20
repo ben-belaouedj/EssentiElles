@@ -1,424 +1,494 @@
 import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput,
-  Alert
-} from 'react-native';
+import { Alert, Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Screen from '../../src/components/ui/Screen';
+import IconButton from '../../src/components/ui/IconButton';
+import PrimaryButton from '../../src/components/ui/PrimaryButton';
+import QuantityStepper from '../../src/components/ui/QuantityStepper';
+import EmptyState from '../../src/components/ui/EmptyState';
+import AppBadge from '../../src/components/ui/AppBadge';
+import ListRow from '../../src/components/ui/ListRow';
+import { GradientCard } from '../../src/components/ui/GradientCard';
 import { useCartStore } from '../../src/store/cartStore';
 import { addressService } from '../../src/services/api';
 import { checkoutCart } from '../../src/services/paymentService';
 import { Address, OrderItem } from '../../src/models/types';
-import EmptyState from '../../src/components/ui/EmptyState';
-import PrimaryButton from '../../src/components/ui/PrimaryButton';
-import { Colors } from '../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../src/constants/spacing';
 import { getPaymentMode } from '../../src/constants/payment';
-import { t } from '../../src/constants/strings';
+import { Colors } from '../../src/constants/colors';
+import { Elevation, Font, Radius, Spacing, Type } from '../../src/constants/theme';
+
+type Step = 'cart' | 'checkout' | 'confirmation';
 
 export default function CartScreen() {
   const router = useRouter();
-  const { items, updateQuantity, clearCart, total, itemCount } = useCartStore();
-  const [step, setStep] = useState<'cart' | 'checkout' | 'confirmation'>('cart');
+  const { items, updateQuantity, removeItem, clearCart, total, savingsIfSubscribed, itemCount } =
+    useCartStore();
+
+  const [step, setStep] = useState<Step>('cart');
   const [ordering, setOrdering] = useState(false);
   const [addresses, setAddresses] = useState<Address[]>([]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>('');
+  const [selectedAddressId, setSelectedAddressId] = useState('');
   const [deliveryNote, setDeliveryNote] = useState('');
-  const [confirmedOrderNumber, setConfirmedOrderNumber] = useState('');
+  const [confirmedNumber, setConfirmedNumber] = useState('');
   const [confirmedTotal, setConfirmedTotal] = useState(0);
+
   const isDemoMode = getPaymentMode() === 'demo';
+  const count = itemCount();
+  const subtotal = total();
+  const savings = savingsIfSubscribed();
 
   const prepareCheckout = async () => {
-    if (items.length === 0) return;
+    if (!items.length) return;
     setOrdering(true);
     try {
-      const addrRes = await addressService.getAll();
-      const fetchedAddresses: Address[] = addrRes.data;
-      if (fetchedAddresses.length === 0) {
-        Alert.alert(
-          'Adresse requise',
-          'Veuillez d\'abord ajouter une adresse de livraison',
-          [
-            { text: 'Ajouter', onPress: () => router.push('/(main)/profile/addresses' as any) },
-            { text: 'Annuler' }
-          ]
-        );
+      const res = await addressService.getAll();
+      const list = res.data as Address[];
+      if (!list.length) {
+        Alert.alert('Adresse requise', 'Ajoutez une adresse de livraison pour commander.', [
+          { text: 'Ajouter', onPress: () => router.push('/(main)/addresses' as never) },
+          { text: 'Annuler', style: 'cancel' },
+        ]);
         return;
       }
-
-      const defAddr = fetchedAddresses.find(a => a.isDefault) || fetchedAddresses[0];
-      setAddresses(fetchedAddresses);
-      setSelectedAddressId(defAddr.id);
+      setAddresses(list);
+      setSelectedAddressId((list.find((a) => a.isDefault) ?? list[0]).id);
       setStep('checkout');
-    } catch (err: any) {
-      Alert.alert('Erreur', err.message || 'Impossible de charger vos adresses');
+    } catch (err) {
+      Alert.alert('Erreur', err instanceof Error ? err.message : 'Impossible de charger vos adresses');
     } finally {
       setOrdering(false);
     }
   };
 
-  const handleConfirmOrder = async () => {
+  const confirmOrder = async () => {
     if (!selectedAddressId) {
-      Alert.alert('Adresse requise', 'Sélectionnez une adresse de livraison pour continuer.');
+      Alert.alert('Adresse requise', 'Sélectionnez une adresse de livraison.');
       return;
     }
-
     setOrdering(true);
     try {
-      const orderItems: OrderItem[] = items.map(i => ({
-        productId: i.product.id,
-        productName: i.product.name,
-        quantity: i.quantity,
-        unitPrice: i.product.subscriptionPrice,
-        totalPrice: i.product.subscriptionPrice * i.quantity,
+      const orderItems: OrderItem[] = items.map((item) => ({
+        productId: item.product.id,
+        productName: item.product.name,
+        quantity: item.quantity,
+        unitPrice: item.product.price,
+        totalPrice: item.product.price * item.quantity,
       }));
       const result = await checkoutCart({
         items: orderItems,
         addressId: selectedAddressId,
         notes: deliveryNote.trim() || undefined,
       });
-
-      setConfirmedOrderNumber(result.order.orderNumber);
-      setConfirmedTotal(result.order.total || total());
+      setConfirmedNumber(result.order.orderNumber);
+      setConfirmedTotal(result.order.total || subtotal);
       clearCart();
       setStep('confirmation');
-    } catch (err: any) {
-      Alert.alert('Erreur', err.message || 'Impossible de passer la commande');
+    } catch (err) {
+      Alert.alert('Commande impossible', err instanceof Error ? err.message : 'Réessayez dans un instant');
     } finally {
       setOrdering(false);
     }
   };
 
+  // ─── Confirmation ──────────────────────────────────────────
   if (step === 'confirmation') {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Commande confirmée</Text>
-        </View>
-
-        <View style={styles.confirmationCard}>
-          <View style={styles.confirmationIconWrap}>
-            <Ionicons name="checkmark" size={28} color={Colors.textInverse} />
-          </View>
-          <Text style={styles.confirmationTitle}>Merci pour votre commande 🎉</Text>
-          <Text style={styles.confirmationSubtitle}>
-            Votre commande a bien été enregistrée{isDemoMode ? ' (mode démo)' : ''}.
-          </Text>
-
-          <View style={styles.confirmationRow}>
-            <Text style={styles.confirmationLabel}>N° de commande</Text>
-            <Text style={styles.confirmationValue}>{confirmedOrderNumber || '—'}</Text>
-          </View>
-          <View style={styles.confirmationRow}>
-            <Text style={styles.confirmationLabel}>Montant total</Text>
-            <Text style={styles.confirmationValue}>{confirmedTotal.toFixed(2)} €</Text>
-          </View>
+      <Screen tabBarSpace>
+        <View style={styles.successWrap}>
+          <GradientCard colors="sage" contentStyle={styles.successCard}>
+            <View style={styles.successIcon}>
+              <Ionicons name="checkmark" size={26} color={Colors.textInverse} />
+            </View>
+            <Text style={styles.successTitle}>Commande confirmée 🎉</Text>
+            <Text style={styles.successSubtitle}>
+              {isDemoMode
+                ? 'Paiement en mode démo. Votre commande est enregistrée et suivie.'
+                : 'Votre paiement a été accepté. Merci pour votre confiance !'}
+            </Text>
+            <View style={styles.successRefs}>
+              <View style={styles.successRef}>
+                <Text style={styles.successRefLabel}>N° de commande</Text>
+                <Text style={styles.successRefValue}>{confirmedNumber || '—'}</Text>
+              </View>
+              <View style={styles.successRef}>
+                <Text style={styles.successRefLabel}>Montant</Text>
+                <Text style={styles.successRefValue}>{confirmedTotal.toFixed(2)} €</Text>
+              </View>
+            </View>
+          </GradientCard>
 
           <PrimaryButton
             label="Suivre ma commande"
-            onPress={() => router.push('/(main)/orders' as any)}
-            style={{ marginTop: Spacing.md }}
+            icon="navigate-outline"
+            onPress={() => router.replace('/(main)/(orders)/orders' as never)}
+            style={{ marginTop: Spacing.lg }}
           />
-          <TouchableOpacity style={styles.secondaryAction} onPress={() => router.push('/(main)/catalog' as any)}>
-            <Text style={styles.secondaryActionText}>Continuer mes achats</Text>
-          </TouchableOpacity>
+          <PrimaryButton
+            label="Continuer mes achats"
+            variant="ghost"
+            onPress={() => router.replace('/(main)/catalog' as never)}
+            style={{ marginTop: Spacing.sm }}
+          />
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
+  // ─── Checkout ──────────────────────────────────────────────
   if (step === 'checkout') {
     return (
-      <SafeAreaView style={styles.safe}>
+      <Screen scroll tabBarSpace>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setStep('cart')} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Validation de commande</Text>
+          <IconButton name="arrow-back" onPress={() => setStep('cart')} accessibilityLabel="Retour" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Validation</Text>
+            <Text style={styles.headerSubtitle}>Adresse, note de livraison et récapitulatif</Text>
+          </View>
         </View>
 
-        <FlatList
-          data={addresses}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          ListHeaderComponent={
-            <View style={styles.summary}>
-              <Text style={styles.sectionTitle}>Adresse de livraison</Text>
-              <Text style={styles.sectionSubtitle}>Sélectionnez l'adresse à utiliser pour cette commande.</Text>
-            </View>
-          }
-          renderItem={({ item }) => {
-            const selected = item.id === selectedAddressId;
+        <Text style={styles.sectionTitle}>Adresse de livraison</Text>
+        <View style={{ gap: 10 }}>
+          {addresses.map((address) => {
+            const active = address.id === selectedAddressId;
             return (
-              <TouchableOpacity
-                style={[styles.addressCard, selected && styles.addressCardSelected]}
-                onPress={() => setSelectedAddressId(item.id)}
-              >
-                <View style={styles.addressTopRow}>
-                  <Text style={styles.addressLabel}>{item.label}</Text>
-                  {item.isDefault && <Text style={styles.defaultBadge}>Par défaut</Text>}
-                </View>
-                <Text style={styles.addressText}>{item.firstName} {item.lastName}</Text>
-                <Text style={styles.addressText}>{item.street}</Text>
-                <Text style={styles.addressText}>{item.zipCode} {item.city}, {item.country}</Text>
-              </TouchableOpacity>
+              <View key={address.id} style={[styles.addressCard, active && styles.addressCardActive]}>
+                <ListRow
+                  icon={active ? 'radio-button-on' : 'radio-button-off'}
+                  iconColor={active ? Colors.primary : Colors.textTertiary}
+                  iconBackground={active ? Colors.primaryPale : Colors.surfaceAlt}
+                  title={`${address.label}${address.isDefault ? ' · par défaut' : ''}`}
+                  subtitle={`${address.firstName} ${address.lastName}, ${address.street}, ${address.zipCode} ${address.city}`}
+                  chevron={false}
+                  onPress={() => setSelectedAddressId(address.id)}
+                />
+              </View>
             );
-          }}
-          ListFooterComponent={
-            <View style={styles.summary}>
-              <Text style={styles.sectionTitle}>Instructions de livraison (optionnel)</Text>
-              <TextInput
-                value={deliveryNote}
-                onChangeText={setDeliveryNote}
-                placeholder="Code d'entrée, étage, point de dépôt..."
-                multiline
-                numberOfLines={3}
-                placeholderTextColor={Colors.textPlaceholder}
-                style={styles.noteInput}
-              />
+          })}
+        </View>
 
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Sous-total ({itemCount()} articles)</Text>
-                <Text style={styles.summaryValue}>{total().toFixed(2)} €</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Livraison</Text>
-                <Text style={[styles.summaryValue, { color: Colors.success }]}>Gratuite 🚚</Text>
-              </View>
-              <View style={[styles.summaryRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Total à payer</Text>
-                <Text style={styles.totalValue}>{total().toFixed(2)} €</Text>
-              </View>
+        <Text style={styles.sectionTitle}>Instructions de livraison</Text>
+        <View style={styles.noteWrap}>
+          <TextInput
+            value={deliveryNote}
+            onChangeText={setDeliveryNote}
+            placeholder="Code d’entrée, étage, point de dépôt…"
+            placeholderTextColor={Colors.textPlaceholder}
+            multiline
+            numberOfLines={3}
+            style={styles.noteInput}
+          />
+        </View>
 
-              <PrimaryButton
-                label="Confirmer la commande"
-                onPress={handleConfirmOrder}
-                loading={ordering}
-                style={{ marginTop: Spacing.md }}
-              />
-            </View>
-          }
+        <Text style={styles.sectionTitle}>Récapitulatif</Text>
+        <View style={styles.summary}>
+          <Row label={`Sous-total (${count} article${count > 1 ? 's' : ''})`} value={`${subtotal.toFixed(2)} €`} />
+          <Row label="Livraison" value="Offerte 🚚" success />
+          {isDemoMode ? <Row label="Paiement" value="Mode démo" /> : null}
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.totalLabel}>Total à payer</Text>
+            <Text style={styles.totalValue}>{subtotal.toFixed(2)} €</Text>
+          </View>
+        </View>
+
+        <PrimaryButton
+          testID="cart-confirm-btn"
+          label={ordering ? 'Traitement…' : `Confirmer · ${subtotal.toFixed(2)} €`}
+          icon="checkmark-circle-outline"
+          loading={ordering}
+          onPress={() => void confirmOrder()}
+          style={{ marginTop: Spacing.lg }}
         />
-      </SafeAreaView>
+        <Text style={styles.legal}>
+          Les prix sont recalculés côté serveur pour garantir le montant affiché.
+        </Text>
+      </Screen>
     );
   }
 
-  if (items.length === 0) {
+  // ─── Empty cart ────────────────────────────────────────────
+  if (!items.length) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <Screen tabBarSpace>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Mon Panier</Text>
+          <IconButton name="arrow-back" onPress={() => router.back()} accessibilityLabel="Retour" />
+          <Text style={styles.headerTitle}>Panier</Text>
         </View>
         <EmptyState
           icon="bag-outline"
-          title="Panier vide"
-          description="Ajoutez des produits depuis le catalogue"
-          actionLabel="Voir le catalogue"
-          onAction={() => router.push('/(main)/catalog' as any)}
+          title="Votre panier est vide"
+          description="Ajoutez vos essentiels — ou abonnez-vous pour ne plus jamais y penser."
+          actionLabel="Découvrir le catalogue"
+          onAction={() => router.replace('/(main)/catalog' as never)}
+          secondaryLabel="Voir les abonnements"
+          onSecondary={() => router.replace('/(main)/(subs)/subscriptions' as never)}
         />
-      </SafeAreaView>
+      </Screen>
     );
   }
 
+  // ─── Cart ──────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe}>
+    <Screen scroll tabBarSpace>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Mon Panier ({itemCount()} article{itemCount() > 1 ? 's' : ''})</Text>
-        <TouchableOpacity
-          onPress={() => Alert.alert('Vider le panier ?', '', [
-            { text: 'Annuler', style: 'cancel' },
-            { text: 'Vider', style: 'destructive', onPress: clearCart }
-          ])}
-        >
-          <Ionicons name="trash-outline" size={22} color={Colors.error} />
-        </TouchableOpacity>
+        <IconButton name="arrow-back" onPress={() => router.back()} accessibilityLabel="Retour" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Panier</Text>
+          <Text style={styles.headerSubtitle}>
+            {count} article{count > 1 ? 's' : ''} prêt{count > 1 ? 's' : ''} à partir
+          </Text>
+        </View>
+        <IconButton
+          name="trash-outline"
+          color={Colors.error}
+          accessibilityLabel="Vider le panier"
+          onPress={() =>
+            Alert.alert('Vider le panier ?', 'Cette action est réversible.', [
+              { text: 'Annuler', style: 'cancel' },
+              { text: 'Vider', style: 'destructive', onPress: clearCart },
+            ])
+          }
+        />
       </View>
 
-      <FlatList
-        data={items}
-        keyExtractor={item => item.product.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardLeft}>
-              <View style={styles.imgPlaceholder}>
-                <Ionicons name="cube-outline" size={24} color={Colors.primaryLight} />
+      <View style={{ gap: 12 }}>
+        {items.map((item) => (
+          <View key={item.product.id} style={styles.itemCard}>
+            <View style={styles.itemImageWrap}>
+              {item.product.images?.[0] ? (
+                <Image source={{ uri: item.product.images[0] }} style={styles.itemImage} resizeMode="cover" />
+              ) : (
+                <View style={[styles.itemImage, styles.itemPlaceholder]}>
+                  <Ionicons name="cube-outline" size={20} color={Colors.primaryDark} />
+                </View>
+              )}
+            </View>
+
+            <View style={styles.itemBody}>
+              <Text style={styles.itemBrand}>{item.product.brand}</Text>
+              <Text style={styles.itemName} numberOfLines={2}>
+                {item.product.name}
+              </Text>
+              <Text style={styles.itemPrice}>
+                {item.product.price.toFixed(2)} € · unité
+              </Text>
+              <Text style={styles.itemSubscriber}>
+                {item.product.subscriptionPrice.toFixed(2)} € en abonnement
+              </Text>
+
+              <View style={styles.itemFooter}>
+                <QuantityStepper
+                  size="sm"
+                  value={item.quantity}
+                  min={0}
+                  max={20}
+                  onChange={(value) => updateQuantity(item.product.id, value)}
+                />
+                <Text style={styles.itemTotal}>
+                  {(item.product.price * item.quantity).toFixed(2)} €
+                </Text>
               </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.brand}>{item.product.brand}</Text>
-                <Text style={styles.name} numberOfLines={2}>{item.product.name}</Text>
-                <Text style={styles.price}>{item.product.subscriptionPrice.toFixed(2)} €/unité</Text>
-              </View>
             </View>
-            <View style={styles.qtyRow}>
-              <TouchableOpacity
-                style={styles.qtyBtn}
-                onPress={() => updateQuantity(item.product.id, item.quantity - 1)}
-              >
-                <Ionicons name={item.quantity === 1 ? 'trash-outline' : 'remove'} size={16} color={item.quantity === 1 ? Colors.error : Colors.primary} />
-              </TouchableOpacity>
-              <Text style={styles.qtyVal}>{item.quantity}</Text>
-              <TouchableOpacity
-                style={styles.qtyBtn}
-                onPress={() => updateQuantity(item.product.id, item.quantity + 1)}
-              >
-                <Ionicons name="add" size={16} color={Colors.primary} />
-              </TouchableOpacity>
-              <Text style={styles.lineTotal}>{(item.product.subscriptionPrice * item.quantity).toFixed(2)} €</Text>
-            </View>
-          </View>
-        )}
-        ListFooterComponent={
-          <View style={styles.summary}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Sous-total ({itemCount()} articles)</Text>
-              <Text style={styles.summaryValue}>{total().toFixed(2)} €</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Livraison</Text>
-              <Text style={[styles.summaryValue, { color: Colors.success }]}>Gratuite 🚚</Text>
-            </View>
-            <View style={[styles.summaryRow, styles.totalRow]}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{total().toFixed(2)} €</Text>
-            </View>
-            {isDemoMode && (
-              <View style={styles.demoBadge}>
-                <Ionicons name="flask-outline" size={14} color={Colors.info} />
-                <Text style={styles.demoBadgeText}>{t('paymentDemoMode')}</Text>
-              </View>
-            )}
-            <PrimaryButton
-              label="Valider la commande"
-              onPress={prepareCheckout}
-              loading={ordering}
-              style={{ marginTop: Spacing.md }}
+
+            <IconButton
+              name="close"
+              size={28}
+              iconSize={15}
+              variant="plain"
+              onPress={() => removeItem(item.product.id)}
+              accessibilityLabel="Retirer"
+              style={styles.itemRemove}
             />
           </View>
-        }
+        ))}
+      </View>
+
+      {savings > 0.01 ? (
+        <View style={styles.savingsCard}>
+          <View style={styles.savingsIcon}>
+            <Ionicons name="repeat" size={16} color={Colors.textInverse} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.savingsTitle}>
+              Économisez {savings.toFixed(2)} € à chaque livraison
+            </Text>
+            <Text style={styles.savingsText}>
+              Passez ces produits en abonnement : même contenu, prix abonné, sans engagement.
+            </Text>
+          </View>
+          <AppBadge label="Abonnement" variant="primary" icon="pricetag" />
+        </View>
+      ) : null}
+
+      {/* Summary */}
+      <View style={styles.summary}>
+        <Row label={`Sous-total (${count} article${count > 1 ? 's' : ''})`} value={`${subtotal.toFixed(2)} €`} />
+        <Row label="Livraison" value="Offerte 🚚" success />
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryRow}>
+          <Text style={styles.totalLabel}>Total</Text>
+          <Text style={styles.totalValue}>{subtotal.toFixed(2)} €</Text>
+        </View>
+      </View>
+
+      <PrimaryButton
+        testID="cart-checkout-btn"
+        label="Passer commande"
+        icon="arrow-forward"
+        iconPosition="right"
+        loading={ordering}
+        onPress={() => void prepareCheckout()}
+        style={{ marginTop: Spacing.lg }}
       />
-    </SafeAreaView>
+      <PrimaryButton
+        label="Ajouter d’autres produits"
+        variant="ghost"
+        onPress={() => router.push('/(main)/catalog' as never)}
+        style={{ marginTop: Spacing.sm }}
+      />
+    </Screen>
+  );
+}
+
+function Row({
+  label,
+  value,
+  success,
+}: {
+  label: string;
+  value: string;
+  success?: boolean;
+}) {
+  return (
+    <View style={styles.summaryRow}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={[styles.summaryValue, success && { color: Colors.success }]}>{value}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: 12 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center', ...Shadow.card },
-  title: { ...Typography.h3, color: Colors.textPrimary, flex: 1 },
-  list: { padding: Spacing.screen, paddingBottom: Spacing.xl },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.sm, ...Shadow.card },
-  cardLeft: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  imgPlaceholder: { width: 56, height: 56, borderRadius: BorderRadius.md, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center' },
-  brand: { fontSize: 10, color: Colors.textTertiary, fontFamily: 'Poppins_500Medium', textTransform: 'uppercase' },
-  name: { ...Typography.bodySmall, color: Colors.textPrimary, fontFamily: 'Poppins_600SemiBold', marginTop: 2 },
-  price: { fontSize: 13, color: Colors.primary, fontFamily: 'Poppins_600SemiBold', marginTop: 4 },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  qtyBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center' },
-  qtyVal: { fontSize: 16, fontFamily: 'Poppins_700Bold', color: Colors.textPrimary, minWidth: 24, textAlign: 'center' },
-  lineTotal: { ...Typography.subtitle, color: Colors.primary, marginLeft: 8 },
-  summary: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginTop: Spacing.sm, ...Shadow.card },
-  sectionTitle: { ...Typography.subtitle, color: Colors.textPrimary, marginBottom: Spacing.xs },
-  sectionSubtitle: { ...Typography.caption, color: Colors.textSecondary },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  summaryLabel: { fontSize: 14, color: Colors.textSecondary },
-  summaryValue: { fontSize: 14, color: Colors.textPrimary, fontFamily: 'Poppins_500Medium' },
-  totalRow: { borderTopWidth: 1, borderTopColor: Colors.borderLight, paddingTop: 8, marginTop: 4, marginBottom: 0 },
-  totalLabel: { ...Typography.subtitle, color: Colors.textPrimary },
-  totalValue: { ...Typography.h4, color: Colors.primary },
-  demoBadge: {
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: Spacing.lg },
+  headerTitle: { ...Type.h2, color: Colors.textPrimary },
+  headerSubtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 1 },
+  itemCard: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.sm,
+    ...Elevation.xs,
+  },
+  itemImageWrap: { width: 80, height: 80, borderRadius: Radius.lg, overflow: 'hidden' },
+  itemImage: { width: '100%', height: '100%' },
+  itemPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryPale },
+  itemBody: { flex: 1, gap: 2 },
+  itemBrand: { ...Type.caption, color: Colors.textTertiary, textTransform: 'uppercase' },
+  itemName: { ...Type.bodyStrong, color: Colors.textPrimary },
+  itemPrice: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  itemSubscriber: { fontFamily: Font.medium, fontSize: 11.5, color: Colors.success },
+  itemFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.infoBg,
-    borderWidth: 1,
-    borderColor: Colors.info + '30',
-    borderRadius: BorderRadius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignSelf: 'flex-start',
+    justifyContent: 'space-between',
     marginTop: 8,
   },
-  demoBadgeText: {
-    fontSize: 12,
-    color: Colors.info,
-    fontFamily: 'Poppins_500Medium',
-  },
-  addressCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  addressCardSelected: {
-    borderColor: Colors.primary,
+  itemTotal: { ...Type.price, fontSize: 15, color: Colors.textPrimary },
+  itemRemove: { position: 'absolute', top: 4, right: 4 },
+  savingsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: Spacing.md,
     backgroundColor: Colors.primaryPale,
-  },
-  addressTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  addressLabel: { ...Typography.bodyEmphasis, color: Colors.textPrimary },
-  defaultBadge: {
-    ...Typography.caption,
-    color: Colors.primaryDark,
-    backgroundColor: Colors.secondary,
-    borderRadius: BorderRadius.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  addressText: { ...Typography.bodySmall, color: Colors.textSecondary },
-  noteInput: {
+    borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.borderLight,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surface,
-    minHeight: 86,
-    textAlignVertical: 'top',
+    borderColor: Colors.primaryMuted,
     padding: Spacing.md,
-    ...Typography.body,
-    color: Colors.textPrimary,
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.md,
   },
-  confirmationCard: {
-    margin: Spacing.screen,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    ...Shadow.card,
-  },
-  confirmationIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  savingsIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.success,
-    alignSelf: 'center',
-    marginBottom: Spacing.md,
   },
-  confirmationTitle: { ...Typography.h4, color: Colors.textPrimary, textAlign: 'center' },
-  confirmationSubtitle: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.xs, marginBottom: Spacing.lg },
-  confirmationRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  savingsTitle: { ...Type.smallStrong, color: Colors.primaryDark },
+  savingsText: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  summary: {
+    marginTop: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+    ...Elevation.xs,
+  },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  summaryLabel: { ...Type.body, color: Colors.textSecondary },
+  summaryValue: { ...Type.bodyStrong, color: Colors.textPrimary },
+  summaryDivider: { height: 1, backgroundColor: Colors.borderLight, marginVertical: 4 },
+  totalLabel: { ...Type.bodyStrong, color: Colors.textPrimary },
+  totalValue: { ...Type.h2, color: Colors.textPrimary },
+  sectionTitle: { ...Type.h3, color: Colors.textPrimary, marginTop: Spacing.lg, marginBottom: Spacing.sm },
+  addressCard: {
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.surface,
+    overflow: 'hidden',
+  },
+  addressCardActive: { borderColor: Colors.primaryLight, backgroundColor: Colors.primaryPale },
+  noteWrap: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+  },
+  noteInput: {
+    minHeight: 70,
+    fontFamily: Font.regular,
+    fontSize: 14,
+    color: Colors.textPrimary,
+    textAlignVertical: 'top',
+  },
+  legal: { ...Type.small, color: Colors.textTertiary, marginTop: Spacing.md, textAlign: 'center' },
+  successWrap: { paddingTop: Spacing.xl },
+  successCard: { alignItems: 'center', gap: 10, paddingVertical: Spacing.xl },
+  successIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.24)',
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    justifyContent: 'center',
   },
-  confirmationLabel: { ...Typography.bodySmall, color: Colors.textSecondary },
-  confirmationValue: { ...Typography.bodyEmphasis, color: Colors.textPrimary },
-  secondaryAction: { marginTop: Spacing.md, alignSelf: 'center' },
-  secondaryActionText: { ...Typography.bodySmall, color: Colors.primaryDark, fontFamily: 'Poppins_500Medium' },
+  successTitle: { ...Type.h2, color: Colors.textInverse, textAlign: 'center' },
+  successSubtitle: {
+    ...Type.small,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    paddingHorizontal: Spacing.md,
+  },
+  successRefs: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: Spacing.md,
+    alignSelf: 'stretch',
+  },
+  successRef: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: Radius.lg,
+    padding: Spacing.sm,
+    alignItems: 'center',
+  },
+  successRefLabel: { fontFamily: Font.medium, fontSize: 11, color: 'rgba(255,255,255,0.85)' },
+  successRefValue: { fontFamily: Font.semibold, fontSize: 15, color: Colors.textInverse, marginTop: 2 },
 });

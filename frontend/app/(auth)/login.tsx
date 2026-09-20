@@ -1,61 +1,80 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from 'react-native';
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { authService } from '../../src/services/api';
-import { useAuthStore } from '../../src/store/authStore';
+import Screen from '../../src/components/ui/Screen';
 import AppTextField from '../../src/components/ui/AppTextField';
 import PrimaryButton from '../../src/components/ui/PrimaryButton';
-import AppScreen from '../../src/components/ui/AppScreen';
-import AppCard from '../../src/components/ui/AppCard';
-import { Colors } from '../../src/constants/colors';
-import { Typography, Spacing, BorderRadius } from '../../src/constants/spacing';
+import PressableScale from '../../src/components/ui/PressableScale';
+import { authService } from '../../src/services/api';
+import { useAuthStore } from '../../src/store/authStore';
 import { User } from '../../src/models/types';
+import { Colors } from '../../src/constants/colors';
+import { Elevation, Font, Radius, Spacing, Type } from '../../src/constants/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { setAuth } = useAuthStore();
+  const setAuth = useAuthStore((s) => s.setAuth);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   const validate = () => {
-    const e: typeof errors = {};
-    if (!email.trim()) e.email = 'Email requis';
-    else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Email invalide';
-    if (!password) e.password = 'Mot de passe requis';
-    else if (password.length < 6) e.password = '6 caractères minimum';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    const next: typeof errors = {};
+    if (!email.trim()) next.email = 'Email requis';
+    else if (!/\S+@\S+\.\S+/.test(email)) next.email = 'Email invalide';
+    if (!password) next.password = 'Mot de passe requis';
+    else if (password.length < 6) next.password = '6 caractères minimum';
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
-  const handleLogin = async () => {
+  const submit = async () => {
     if (!validate()) return;
     setLoading(true);
     try {
       const res = await authService.login(email.trim().toLowerCase(), password);
       await setAuth(res.data.token, res.data.user as User);
       router.replace('/(main)/(home)/home');
-    } catch (err: any) {
-      Alert.alert('Connexion impossible', err.message || 'Email ou mot de passe incorrect');
+    } catch (err) {
+      Alert.alert(
+        'Connexion impossible',
+        err instanceof Error ? err.message : 'Email ou mot de passe incorrect'
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AppScreen scrollable contentContainerStyle={styles.scroll}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        {/* Header */}
-        <LinearGradient colors={[Colors.primaryPale, Colors.background]} style={styles.header}>
-          <Text style={styles.appName}>🌸 Livrella</Text>
-          <Text style={styles.title}>Bon retour !</Text>
-          <Text style={styles.subtitle}>Connectez-vous pour accéder à vos abonnements</Text>
-        </LinearGradient>
+    <Screen scroll background="blush">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.logoWrap}>
+            <Image
+              source={require('../../assets/images/brand/logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.brand}>Livrella</Text>
+          <Text style={styles.title}>Bon retour 🌸</Text>
+          <Text style={styles.subtitle}>
+            Connectez-vous pour retrouver votre routine et votre prochaine livraison.
+          </Text>
+        </View>
 
-        {/* Form */}
-        <AppCard style={styles.form}>
+        {/* Form card */}
+        <View style={styles.card}>
           <AppTextField
             testID="login-email-input"
             label="Email"
@@ -86,57 +105,103 @@ export default function LoginScreen() {
             error={errors.password}
           />
 
-          <TouchableOpacity
+          <PressableScale
             testID="login-forgot-password-btn"
             onPress={() => router.push('/(auth)/forgot-password')}
-            style={styles.forgotBtn}
+            style={styles.forgot}
+            scaleTo={0.96}
           >
             <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
-          </TouchableOpacity>
+          </PressableScale>
 
           <PrimaryButton
             testID="login-submit-btn"
             label="Se connecter"
-            onPress={handleLogin}
+            icon="arrow-forward"
+            iconPosition="right"
             loading={loading}
-            style={{ marginTop: Spacing.sm }}
+            onPress={() => void submit()}
           />
 
-          {/* Demo hint */}
           <View style={styles.demoHint}>
-            <Text style={styles.demoText}>💡 Compte démo : sarah@example.com / password123</Text>
+            <Text style={styles.demoText}>
+              💡 Compte démo : sarah@example.com · password123
+            </Text>
           </View>
+        </View>
 
-          <View style={styles.registerRow}>
-            <Text style={styles.registerText}>Pas encore de compte ? </Text>
-            <TouchableOpacity testID="login-register-link" onPress={() => router.push('/(auth)/register')}>
-              <Text style={styles.registerLink}>S'inscrire</Text>
-            </TouchableOpacity>
-          </View>
-        </AppCard>
+        <View style={styles.registerRow}>
+          <Text style={styles.registerText}>Pas encore de compte ?</Text>
+          <PressableScale
+            testID="login-register-link"
+            onPress={() => router.push('/(auth)/register')}
+            style={styles.registerPill}
+            scaleTo={0.96}
+          >
+            <Text style={styles.registerLink}>Créer mon compte</Text>
+          </PressableScale>
+        </View>
       </KeyboardAvoidingView>
-    </AppScreen>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flexGrow: 1, paddingBottom: Spacing.lg },
-  header: { padding: Spacing.xl, paddingTop: Spacing.xl, paddingBottom: Spacing.xxl, alignItems: 'center' },
-  appName: { fontSize: 22, fontFamily: 'Poppins_700Bold', color: Colors.primaryDark, marginBottom: Spacing.lg },
-  title: { ...Typography.h2, color: Colors.textPrimary, textAlign: 'center' },
-  subtitle: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.sm },
-  form: {
-    flex: 1,
-    padding: Spacing.xl,
-    borderTopLeftRadius: BorderRadius.xxl,
-    borderTopRightRadius: BorderRadius.xxl,
-    marginTop: -Spacing.lg,
+  hero: { alignItems: 'center', paddingTop: Spacing.xl, paddingBottom: Spacing.xl },
+  logoWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+    ...Elevation.sm,
   },
-  forgotBtn: { alignSelf: 'flex-end', marginTop: -Spacing.sm, marginBottom: Spacing.md },
-  forgotText: { ...Typography.bodySmall, color: Colors.primaryDeep, fontFamily: 'Poppins_500Medium' },
-  demoHint: { backgroundColor: Colors.infoBg, borderRadius: BorderRadius.lg, padding: Spacing.smd, marginTop: Spacing.md, borderWidth: 1, borderColor: Colors.borderLight },
-  demoText: { fontSize: 11, color: Colors.info, fontFamily: 'Poppins_400Regular', textAlign: 'center' },
-  registerRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: Spacing.lg },
-  registerText: { ...Typography.body, color: Colors.textSecondary },
-  registerLink: { ...Typography.bodyEmphasis, color: Colors.primaryDark },
+  logo: { width: 60, height: 60 },
+  brand: { fontFamily: Font.semibold, fontSize: 14, color: Colors.primaryDark, letterSpacing: 0.4 },
+  title: { ...Type.h1, color: Colors.textPrimary, marginTop: Spacing.sm },
+  subtitle: {
+    ...Type.small,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 6,
+    maxWidth: 300,
+  },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.lg,
+    ...Elevation.md,
+  },
+  forgot: { alignSelf: 'flex-end', marginTop: -6, marginBottom: Spacing.md },
+  forgotText: { fontFamily: Font.medium, fontSize: 13, color: Colors.primaryDeep },
+  demoHint: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.infoBg,
+    borderRadius: Radius.lg,
+    padding: Spacing.sm,
+  },
+  demoText: { ...Type.small, fontSize: 11.5, color: '#4C7099', textAlign: 'center' },
+  registerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: Spacing.xl,
+    paddingBottom: Spacing.xl,
+  },
+  registerText: { ...Type.body, color: Colors.textSecondary },
+  registerPill: {
+    backgroundColor: Colors.primaryPale,
+    borderRadius: Radius.full,
+    paddingHorizontal: 14,
+    height: 36,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.primaryMuted,
+  },
+  registerLink: { fontFamily: Font.semibold, fontSize: 13, color: Colors.primaryDark },
 });

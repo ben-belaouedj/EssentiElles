@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_UNREACHABLE_MESSAGE, getApiBaseUrl } from '../constants/api';
+import { reportNetworkFailure, useConnectivityStore } from '../store/connectivityStore';
 
 const api = axios.create({
   baseURL: getApiBaseUrl(),
@@ -17,10 +18,14 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Uniform error handling
+// Uniform error handling + offline detection
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    useConnectivityStore.getState().reportSuccess();
+    return response;
+  },
   (error) => {
+    if (!error.response) reportNetworkFailure();
     const message =
       (!error.response && error.message === 'Network Error' && API_UNREACHABLE_MESSAGE) ||
       error.response?.data?.detail ||
@@ -43,6 +48,12 @@ export const authService = {
     api.put('/auth/me', data),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.put('/auth/me/password', { currentPassword, newPassword }),
+  forgotPassword: (email: string) =>
+    api.post('/auth/forgot-password', { email }),
+  resetPassword: (email: string, code: string, newPassword: string) =>
+    api.post('/auth/reset-password', { email, code, newPassword }),
+  deleteAccount: (password: string) =>
+    api.delete('/auth/me', { data: { password } }),
 };
 
 // ─── Categories ─────────────────────────────────────────
@@ -76,6 +87,7 @@ export const subscriptionService = {
   update: (id: string, data: any) => api.put(`/subscriptions/${id}`, data),
   pause: (id: string) => api.post(`/subscriptions/${id}/pause`),
   resume: (id: string) => api.post(`/subscriptions/${id}/resume`),
+  skipNextDelivery: (id: string) => api.post(`/subscriptions/${id}/skip`),
   cancel: (id: string) => api.delete(`/subscriptions/${id}`),
 };
 
@@ -120,11 +132,12 @@ export const offerService = {
 
 export const adminService = {
   getDashboard: () => api.get('/admin/dashboard'),
+  getAllProducts: () => api.get('/admin/products'),
   getUsers: () => api.get('/admin/users'),
   toggleUser: (id: string) => api.put(`/admin/users/${id}/toggle`),
   getOrders: () => api.get('/admin/orders'),
   updateOrderStatus: (id: string, status: string) =>
-    api.put(`/admin/orders/${id}/status`, null, { params: { status } }),
+    api.put(`/admin/orders/${id}/status`, { status }),
   getSubscriptions: () => api.get('/admin/subscriptions'),
   getTickets: () => api.get('/admin/tickets'),
   replyTicket: (id: string, message: string) =>
@@ -134,7 +147,7 @@ export const adminService = {
   deleteProduct: (id: string) => api.delete(`/products/${id}`),
   toggleProduct: (id: string) => api.put(`/products/${id}/toggle`),
   broadcast: (title: string, body: string) =>
-    api.post('/admin/notifications/broadcast', null, { params: { title, body } }),
+    api.post('/admin/notifications/broadcast', { title, body }),
   createOffer: (data: any) => api.post('/admin/offers', data),
   updateOffer: (id: string, data: any) => api.put(`/admin/offers/${id}`, data),
   deleteOffer: (id: string) => api.delete(`/admin/offers/${id}`),

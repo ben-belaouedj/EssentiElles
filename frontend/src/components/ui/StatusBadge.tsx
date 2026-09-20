@@ -1,56 +1,40 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Colors } from '../../constants/colors';
-import { Typography, BorderRadius } from '../../constants/spacing';
-
-type BadgeType = 'active' | 'paused' | 'cancelled' | 'confirmed' | 'preparing' | 'shipped' | 'delivered' | 'pending' | 'paid' | 'open' | 'in_progress' | 'resolved' | 'closed' | 'new' | 'promo' | 'bestseller';
+import AppBadge, { BadgeVariant } from './AppBadge';
+import { ViewStyle } from 'react-native';
 
 interface Props {
-  status: BadgeType | string;
-  label?: string;
+  status: string;
   small?: boolean;
+  style?: ViewStyle;
 }
 
-const badgeConfig: Record<string, { bg: string; color: string; emoji: string }> = {
-  active:     { bg: Colors.statusActiveBg,   color: Colors.statusActive,    emoji: '✓' },
-  paused:     { bg: Colors.statusPausedBg,   color: Colors.statusPaused,    emoji: '⏸' },
-  cancelled:  { bg: Colors.statusCancelledBg, color: Colors.statusCancelled, emoji: '✕' },
-  confirmed:  { bg: Colors.infoBg,           color: Colors.info,            emoji: '✓' },
-  preparing:  { bg: Colors.statusPausedBg,   color: Colors.statusPaused,    emoji: '📦' },
-  shipped:    { bg: Colors.infoBg,           color: Colors.info,            emoji: '🚚' },
-  delivered:  { bg: Colors.statusActiveBg,   color: Colors.statusActive,    emoji: '✓' },
-  pending:    { bg: Colors.statusPausedBg,   color: Colors.statusPaused,    emoji: '⏳' },
-  paid:       { bg: Colors.statusActiveBg,   color: Colors.statusActive,    emoji: '✓' },
-  open:       { bg: Colors.statusCancelledBg, color: Colors.statusCancelled, emoji: '!' },
-  in_progress:{ bg: Colors.statusPausedBg,   color: Colors.statusPaused,    emoji: '🔄' },
-  resolved:   { bg: Colors.statusActiveBg,   color: Colors.statusActive,    emoji: '✓' },
-  closed:     { bg: Colors.borderLight,      color: Colors.textTertiary,    emoji: '✓' },
-  new:        { bg: Colors.infoBg,           color: Colors.info,            emoji: '★' },
-  promo:      { bg: Colors.warningBg,        color: Colors.warning,         emoji: '%' },
-  bestseller: { bg: Colors.primaryPale,      color: Colors.primaryDark,     emoji: '♥' },
+const MAP: Record<string, { label: string; variant: BadgeVariant }> = {
+  // Orders
+  pending: { label: 'En attente', variant: 'warning' },
+  confirmed: { label: 'Confirmée', variant: 'info' },
+  preparing: { label: 'Préparation', variant: 'warning' },
+  shipped: { label: 'Expédiée', variant: 'primary' },
+  delivered: { label: 'Livrée', variant: 'success' },
+  cancelled: { label: 'Annulée', variant: 'error' },
+  // Subscriptions
+  active: { label: 'Actif', variant: 'success' },
+  paused: { label: 'En pause', variant: 'warning' },
+  expired: { label: 'Expiré', variant: 'neutral' },
+  // Invoices
+  paid: { label: 'Payée', variant: 'success' },
+  sent: { label: 'Envoyée', variant: 'info' },
+  draft: { label: 'Brouillon', variant: 'neutral' },
+  overdue: { label: 'En retard', variant: 'error' },
+  // Support
+  open: { label: 'Ouvert', variant: 'info' },
+  in_progress: { label: 'En cours', variant: 'warning' },
+  waiting: { label: 'En attente', variant: 'neutral' },
+  resolved: { label: 'Résolu', variant: 'success' },
+  closed: { label: 'Fermé', variant: 'neutral' },
 };
 
-export default function StatusBadge({ status, label, small }: Props) {
-  const config = badgeConfig[status] || { bg: Colors.borderLight, color: Colors.textTertiary, emoji: '' };
-  const displayLabel = label || status.replace('_', ' ');
-
-  return (
-    <View style={[styles.badge, { backgroundColor: config.bg }, small && styles.small]}>
-      <Text style={[styles.text, { color: config.color }, small && styles.smallText]}>
-        {displayLabel.charAt(0).toUpperCase() + displayLabel.slice(1)}
-      </Text>
-    </View>
-  );
+/** Status pill shared by orders, invoices, subscriptions and tickets. */
+export default function StatusBadge({ status, small = false, style }: Props) {
+  const config = MAP[status] ?? { label: status, variant: 'neutral' as BadgeVariant };
+  return <AppBadge label={config.label} variant={config.variant} size={small ? 'sm' : 'md'} style={style} />;
 }
-
-const styles = StyleSheet.create({
-  badge: {
-    borderRadius: BorderRadius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    alignSelf: 'flex-start',
-  },
-  small: { paddingHorizontal: 8, paddingVertical: 3 },
-  text: { ...Typography.caption, fontFamily: 'Poppins_600SemiBold' },
-  smallText: { fontSize: 10 },
-});

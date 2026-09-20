@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import PrimaryButton from './PrimaryButton';
 import { Colors } from '../../constants/colors';
-import { Typography, Spacing, Shadow, BorderRadius } from '../../constants/spacing';
+import { Elevation, Font, Gradients, Radius, Spacing, Type } from '../../constants/theme';
 
 interface Props {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -10,39 +12,88 @@ interface Props {
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  tone?: 'rose' | 'sage' | 'ink';
+  compact?: boolean;
+  style?: ViewStyle;
 }
 
-export default function EmptyState({ icon = 'cube-outline', title, description, actionLabel, onAction }: Props) {
+/** Empty / error state with gradient orb and optional CTAs. */
+export default function EmptyState({
+  icon = 'cube-outline',
+  title,
+  description,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
+  tone = 'rose',
+  compact = false,
+  style,
+}: Props) {
+  const palette =
+    tone === 'sage' ? Gradients.sage : tone === 'ink' ? Gradients.ink : Gradients.blush;
+  const iconColor = tone === 'rose' ? Colors.primaryDark : Colors.textInverse;
+
   return (
-    <View style={styles.container}>
-      <View style={styles.iconWrap}>
-        <Ionicons name={icon} size={40} color={Colors.primaryLight} />
-      </View>
+    <View style={[styles.container, compact && styles.containerCompact, style]}>
+      <LinearGradient
+        colors={palette as unknown as [string, string, ...string[]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.orb}
+      >
+        <Ionicons name={icon} size={30} color={iconColor} />
+      </LinearGradient>
+
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.desc}>{description}</Text> : null}
+
       {actionLabel && onAction ? (
-        <TouchableOpacity style={styles.btn} onPress={onAction}>
-          <Text style={styles.btnText}>{actionLabel}</Text>
-        </TouchableOpacity>
+        <PrimaryButton label={actionLabel} onPress={onAction} style={styles.cta} />
+      ) : null}
+
+      {secondaryLabel && onSecondary ? (
+        <Text onPress={onSecondary} style={styles.link}>
+          {secondaryLabel}
+        </Text>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, minHeight: 200 },
-  iconWrap: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: Colors.primaryPale,
-    alignItems: 'center', justifyContent: 'center',
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
+  },
+  containerCompact: { paddingVertical: Spacing.xl },
+  orb: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: Spacing.md,
+    ...Elevation.sm,
   },
-  title: { ...Typography.h4, color: Colors.textPrimary, textAlign: 'center', marginBottom: Spacing.sm },
-  desc: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.lg },
-  btn: {
-    backgroundColor: Colors.primary, borderRadius: BorderRadius.pill,
-    paddingVertical: 12, paddingHorizontal: 24,
-    ...Shadow.button,
+  title: { ...Type.h3, color: Colors.textPrimary, textAlign: 'center' },
+  desc: {
+    ...Type.small,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 6,
+    maxWidth: 300,
   },
-  btnText: { ...Typography.button, color: Colors.textInverse },
+  cta: { marginTop: Spacing.lg, alignSelf: 'stretch', maxWidth: 280 },
+  link: {
+    marginTop: Spacing.md,
+    fontFamily: Font.medium,
+    fontSize: 13.5,
+    color: Colors.primaryDark,
+  },
+  orbRadius: { borderRadius: Radius.full },
 });

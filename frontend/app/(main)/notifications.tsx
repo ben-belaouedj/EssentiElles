@@ -1,148 +1,255 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, FlatList,
-  TouchableOpacity, RefreshControl
-} from 'react-native';
+import React, { useMemo } from 'react';
+import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { notificationService } from '../../src/services/api';
-import { Notification } from '../../src/models/types';
+import Screen from '../../src/components/ui/Screen';
+import IconButton from '../../src/components/ui/IconButton';
+import PressableScale from '../../src/components/ui/PressableScale';
 import EmptyState from '../../src/components/ui/EmptyState';
-import LoadingSpinner from '../../src/components/ui/LoadingSpinner';
+import AppBadge from '../../src/components/ui/AppBadge';
+import OfflineBanner from '../../src/components/ui/OfflineBanner';
+import SectionHeader from '../../src/components/layout/SectionHeader';
+import { SkeletonRows } from '../../src/components/ui/SkeletonCard';
+import { useOfflineQuery } from '../../src/hooks/useOfflineQuery';
+import { notificationService, subscriptionService } from '../../src/services/api';
+import { Notification, Subscription } from '../../src/models/types';
+import { buildReminders } from '../../src/services/reminders';
+import { usePreferencesStore } from '../../src/store/preferencesStore';
 import { Colors } from '../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../src/constants/spacing';
+import { Elevation, Font, Radius, Spacing, Type } from '../../src/constants/theme';
 
-const notifIcons: Record<string, { icon: string; color: string; bg: string }> = {
-  delivery:     { icon: 'cube-outline',             color: Colors.primary,  bg: Colors.primaryPale },
-  subscription: { icon: 'repeat-outline',           color: Colors.info,     bg: Colors.infoBg },
-  promo:        { icon: 'pricetag-outline',          color: Colors.warning,  bg: Colors.warningBg },
-  support:      { icon: 'chatbubble-ellipses-outline', color: Colors.success, bg: Colors.successBg },
-  system:       { icon: 'notifications-outline',    color: Colors.textTertiary, bg: Colors.borderLight },
+const TYPE_META: Record<
+  Notification['type'],
+  { icon: keyof typeof Ionicons.glyphMap; bg: string; fg: string; label: string }
+> = {
+  delivery: { icon: 'cube', bg: Colors.primaryPale, fg: Colors.primaryDark, label: 'Livraison' },
+  subscription: { icon: 'repeat', bg: Colors.accentSageSoft, fg: '#5F7358', label: 'Abonnement' },
+  promo: { icon: 'pricetag', bg: Colors.warningBg, fg: '#9A7635', label: 'Offre' },
+  support: { icon: 'chatbubbles', bg: Colors.infoBg, fg: '#4C7099', label: 'Support' },
+  system: { icon: 'information-circle', bg: Colors.surfaceAlt, fg: Colors.textSecondary, label: 'Info' },
 };
 
-function formatDate(d?: string) {
-  if (!d) return '';
-  const date = new Date(d);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `il y a ${mins} min`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `il y a ${hours}h`;
-  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const deliveryReminders = usePreferencesStore((s) => s.deliveryReminders);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await notificationService.getAll();
-      setNotifications(res.data);
-    } catch {}
-    finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  const query = useOfflineQuery<Notification[]>(
+    () => notificationService.getAll().then((res) => res.data as Notification[]),
+    { cacheKey: 'notifications' }
+  );
+  const subscriptions = useOfflineQuery<Subscription[]>(
+    () => subscriptionService.getAll().then((res) => res.data as Subscription[]),
+    { cacheKey: 'subscriptions' }
+  );
 
-  useEffect(() => { load(); }, []);
+  const unread = (query.data ?? []).filter((n) => !n.isRead).length;
+  const reminders = useMemo(
+    () => (deliveryReminders ? buildReminders(subscriptions.data ?? []) : []),
+    [deliveryReminders, subscriptions.data]
+  );
 
-  const handleMarkRead = async (id: string) => {
-    try {
-      await notificationService.markRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-    } catch {}
-  };
-
-  const handleMarkAllRead = async () => {
+  const markAll = async () => {
     try {
       await notificationService.markAllRead();
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    } catch {}
+      await query.refresh();
+    } catch {
+      /* offline: keep local state */
+    }
   };
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const markOne = async (id: string) => {
+    try {
+      await notificationService.markRead(id);
+      query.setData(
+        (query.data ?? []).map((item) => (item.id === id ? { ...item, isRead: true } : item))
+      );
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <Screen
+      scroll
+      tabBarSpace
+      refreshControl={
+        <RefreshControl
+          refreshing={query.refreshing}
+          onRefresh={() => void query.refresh()}
+          tintColor={Colors.primary}
+        />
+      }
+    >
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Notifications</Text>
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={handleMarkAllRead}>
+        <IconButton name="arrow-back" onPress={() => router.back()} accessibilityLabel="Retour" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Notifications</Text>
+          <Text style={styles.subtitle}>
+            {unread ? `${unread} non lue${unread > 1 ? 's' : ''}` : 'Tout est à jour ✨'}
+          </Text>
+        </View>
+        {unread > 0 ? (
+          <PressableScale onPress={() => void markAll()} style={styles.markAll}>
             <Text style={styles.markAllText}>Tout lire</Text>
-          </TouchableOpacity>
-        )}
+          </PressableScale>
+        ) : null}
       </View>
 
-      {loading ? (
-        <LoadingSpinner fullScreen />
-      ) : (
-        <FlatList
-          data={notifications}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); load(); }}
-              tintColor={Colors.primary}
-            />
-          }
-          ListEmptyComponent={
-            <EmptyState
-              icon="notifications-outline"
-              title="Aucune notification"
-              description="Vous serez notifié de vos livraisons et promotions"
-            />
-          }
-          renderItem={({ item }) => {
-            const cfg = notifIcons[item.type] || notifIcons.system;
-            return (
-              <TouchableOpacity
-                testID={`notif-${item.id}`}
-                style={[styles.card, !item.isRead && styles.cardUnread]}
-                onPress={() => handleMarkRead(item.id)}
-                activeOpacity={0.9}
+      <OfflineBanner cacheOnly onRetry={() => void query.refresh()} />
+
+      {/* Local delivery reminders */}
+      {reminders.length ? (
+        <View style={styles.remindersBlock}>
+          <SectionHeader
+            accent
+            title="Rappels de livraison"
+            subtitle="Planifiés localement sur votre appareil"
+          />
+          <View style={{ gap: 10 }}>
+            {reminders.map((reminder) => (
+              <View
+                key={reminder.id}
+                style={[
+                  styles.reminderCard,
+                  reminder.urgency === 'today' && styles.reminderCardToday,
+                ]}
               >
-                <View style={[styles.iconWrap, { backgroundColor: cfg.bg }]}>
-                  <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
+                <View style={styles.reminderIcon}>
+                  <Ionicons name="alarm" size={16} color={Colors.textInverse} />
                 </View>
-                <View style={styles.content}>
-                  <View style={styles.contentHeader}>
-                    <Text style={styles.notifTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
-                  </View>
-                  <Text style={styles.body} numberOfLines={2}>{item.body}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.reminderTitle}>{reminder.title}</Text>
+                  <Text style={styles.reminderBody} numberOfLines={2}>
+                    {reminder.body}
+                  </Text>
                 </View>
-                {!item.isRead && <View style={styles.unreadDot} />}
-              </TouchableOpacity>
-            );
-          }}
+                <AppBadge
+                  label={reminder.daysUntil <= 0 ? 'Aujourd’hui' : `J-${reminder.daysUntil}`}
+                  variant={reminder.urgency === 'today' ? 'warning' : 'sage'}
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {/* Server notifications */}
+      <Text style={styles.sectionTitle}>Historique</Text>
+      {query.loading && !query.data ? (
+        <SkeletonRows count={3} />
+      ) : (query.data ?? []).length === 0 ? (
+        <EmptyState
+          compact
+          icon="notifications-outline"
+          title="Aucune notification"
+          description="Vos alertes de livraison, commandes et offres arriveront ici."
         />
+      ) : (
+        <View style={{ gap: 10 }}>
+          {(query.data ?? []).map((notification) => {
+            const meta = TYPE_META[notification.type] ?? TYPE_META.system;
+            return (
+              <PressableScale
+                key={notification.id}
+                onPress={() => void markOne(notification.id)}
+                style={[styles.card, !notification.isRead && styles.cardUnread]}
+                scaleTo={0.99}
+              >
+                <View style={[styles.icon, { backgroundColor: meta.bg }]}>
+                  <Ionicons name={meta.icon} size={16} color={meta.fg} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {notification.title}
+                    </Text>
+                    {!notification.isRead ? <View style={styles.dot} /> : null}
+                  </View>
+                  <Text style={styles.cardBody} numberOfLines={3}>
+                    {notification.body}
+                  </Text>
+                  <View style={styles.cardMeta}>
+                    <Text style={styles.cardMetaText}>
+                      {meta.label} · {formatDateTime(notification.createdAt)}
+                    </Text>
+                  </View>
+                </View>
+              </PressableScale>
+            );
+          })}
+        </View>
       )}
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: 12 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center', ...Shadow.card },
-  title: { ...Typography.h3, color: Colors.textPrimary, flex: 1 },
-  markAllText: { fontSize: 13, color: Colors.primary, fontFamily: 'Poppins_500Medium' },
-  list: { padding: Spacing.screen, paddingBottom: Spacing.xl },
-  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.sm, ...Shadow.card },
-  cardUnread: { backgroundColor: Colors.primaryPale, borderLeftWidth: 3, borderLeftColor: Colors.primary },
-  iconWrap: { width: 44, height: 44, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center', marginRight: 12, flexShrink: 0 },
-  content: { flex: 1 },
-  contentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  notifTitle: { flex: 1, ...Typography.bodySmall, color: Colors.textPrimary, fontFamily: 'Poppins_600SemiBold', marginRight: 8 },
-  date: { fontSize: 11, color: Colors.textTertiary },
-  body: { fontSize: 13, color: Colors.textSecondary, lineHeight: 20 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary, marginLeft: 8, marginTop: 4, flexShrink: 0 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: Spacing.lg },
+  title: { ...Type.h1, color: Colors.textPrimary },
+  subtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  markAll: {
+    backgroundColor: Colors.primaryPale,
+    borderRadius: Radius.full,
+    paddingHorizontal: 14,
+    height: 34,
+    justifyContent: 'center',
+  },
+  markAllText: { fontFamily: Font.semibold, fontSize: 12.5, color: Colors.primaryDark },
+  remindersBlock: { marginBottom: Spacing.xl },
+  reminderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    ...Elevation.xs,
+  },
+  reminderCardToday: { borderColor: Colors.warning, backgroundColor: Colors.warningBg },
+  reminderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reminderTitle: { ...Type.bodyStrong, color: Colors.textPrimary },
+  reminderBody: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  sectionTitle: { ...Type.h3, color: Colors.textPrimary, marginBottom: Spacing.sm },
+  card: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    ...Elevation.xs,
+  },
+  cardUnread: { borderColor: Colors.primaryMuted, backgroundColor: '#FFFDFD' },
+  icon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardTitle: { ...Type.bodyStrong, color: Colors.textPrimary, flex: 1 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary },
+  cardBody: { ...Type.small, color: Colors.textSecondary, marginTop: 3 },
+  cardMeta: { marginTop: 6 },
+  cardMetaText: { ...Type.small, fontSize: 11, color: Colors.textTertiary },
 });

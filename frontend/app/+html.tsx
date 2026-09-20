@@ -4,7 +4,7 @@ import type { PropsWithChildren } from "react";
 
 export default function Root({ children }: PropsWithChildren) {
   return (
-    <html lang="en" style={{ height: "100%" }}>
+    <html lang="fr" style={{ height: "100%" }}>
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
@@ -12,6 +12,18 @@ export default function Root({ children }: PropsWithChildren) {
           name="viewport"
           content="width=device-width, initial-scale=1, shrink-to-fit=no"
         />
+        <title>Livrella — Vos essentiels, livrés automatiquement</title>
+        <meta
+          name="description"
+          content="Livrella : la boutique d'abonnement pour l'hygiène féminine et les produits bébé. Livraison automatique à votre rythme, sans engagement."
+        />
+        <meta name="theme-color" content="#B5838D" />
+        <meta property="og:title" content="Livrella — Vos essentiels, livrés automatiquement" />
+        <meta
+          property="og:description"
+          content="La boutique d'abonnement pour l'hygiène féminine et les produits bébé. Livraison automatique à votre rythme, sans engagement."
+        />
+        <meta property="og:type" content="website" />
         {/*
           Disable body scrolling on web to make ScrollView components work correctly.
           If you want to enable scrolling, remove `ScrollViewStyleReset` and

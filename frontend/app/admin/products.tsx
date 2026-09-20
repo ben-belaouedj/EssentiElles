@@ -4,11 +4,18 @@ import {
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
   ScrollView, RefreshControl, Switch, ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { adminService } from '../../src/services/api';
 import { Product } from '../../src/models/types';
 import { Colors } from '../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../src/constants/spacing';
+import { Radius, Spacing } from '../../src/constants/spacing';
+import { Elevation, Font, Type } from '../../src/constants/theme';
+import { Chip, ChipRow } from '../../src/components/ui/Chip';
+import IconButton from '../../src/components/ui/IconButton';
+import PrimaryButton from '../../src/components/ui/PrimaryButton';
+import EmptyState from '../../src/components/ui/EmptyState';
+import { SkeletonListItem } from '../../src/components/ui/SkeletonCard';
 
 const FREQ_OPTIONS = [
   { key: 'weekly', label: 'Hebdo' },
@@ -36,25 +43,10 @@ export default function AdminProducts() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const [prodRes, catRes] = await Promise.all([
-        adminService.getCategories(),
-        adminService.getCategories(),
-      ]);
-      const pRes = await fetch('/api/products?limit=100', { headers: { Authorization: `Bearer ${require('../../src/services/api').getToken()}` } }).then(r => r.json()).catch(() => ({ products: [] }));
-      // Use admin endpoint
-      const allProds = await import('../../src/services/api').then(m => m.productService.getAll({}));
-      setProducts(allProds.data.products || allProds.data || []);
-      setCategories(catRes.data);
-    } catch {} finally { setLoading(false); setRefreshing(false); }
-  }, []);
-
-  // Simpler load
   const loadData = useCallback(async () => {
     try {
       const [prodRes, catRes] = await Promise.allSettled([
-        import('../../src/services/api').then(m => m.productService.getAll({})),
+        adminService.getAllProducts(),
         adminService.getCategories(),
       ]);
       if (prodRes.status === 'fulfilled') {
@@ -157,31 +149,42 @@ export default function AdminProducts() {
     <View style={styles.page}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.pageTitle}>Gestion des produits</Text>
-          <Text style={styles.pageSubtitle}>{products.length} produit(s) au catalogue</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pageTitle}>Produits</Text>
+          <Text style={styles.pageSubtitle}>
+            {products.length} produit{products.length > 1 ? 's' : ''} au catalogue
+          </Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
+        <PressableRow onPress={openAdd}>
           <Ionicons name="add" size={18} color={Colors.textInverse} />
           <Text style={styles.addBtnText}>Ajouter</Text>
-        </TouchableOpacity>
+        </PressableRow>
       </View>
 
       {/* Search */}
       <View style={styles.searchRow}>
-        <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
+        <Ionicons name="search-outline" size={17} color={Colors.textTertiary} />
         <TextInput
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Rechercher par nom ou marque..."
+          placeholder="Rechercher par nom ou marque…"
           placeholderTextColor={Colors.textPlaceholder}
         />
+        {search ? (
+          <Ionicons name="close-circle" size={17} color={Colors.textTertiary} onPress={() => setSearch('')} />
+        ) : null}
       </View>
 
       {/* List */}
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.primary} />
+        <View style={styles.list}>
+          <SkeletonListItem />
+          <SkeletonListItem />
+          <SkeletonListItem />
+        </View>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon="cube-outline" title="Aucun produit" description="Ajustez votre recherche ou créez un produit." />
       ) : (
         <FlatList
           data={filtered}
@@ -192,15 +195,13 @@ export default function AdminProducts() {
           }
           renderItem={({ item }) => (
             <View style={styles.row}>
-              <View style={styles.rowLeft}>
-                <View style={styles.rowIcon}>
-                  <Ionicons name="cube-outline" size={20} color={Colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.rowBrand}>{item.brand} — {item.unit}</Text>
-                  <Text style={styles.rowPrice}>{item.subscriptionPrice.toFixed(2)} €/abonné</Text>
-                </View>
+              <View style={styles.rowIcon}>
+                <Ionicons name="cube-outline" size={19} color={Colors.primaryDark} />
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.rowBrand} numberOfLines={1}>{item.brand} · {item.unit}</Text>
+                <Text style={styles.rowPrice}>{item.subscriptionPrice.toFixed(2)} € / abonné</Text>
               </View>
               <View style={styles.rowActions}>
                 <Switch
@@ -209,12 +210,24 @@ export default function AdminProducts() {
                   trackColor={{ false: Colors.borderMedium, true: Colors.primaryLight }}
                   thumbColor={item.isActive ? Colors.primary : Colors.textTertiary}
                 />
-                <TouchableOpacity onPress={() => openEdit(item)} style={styles.iconBtn}>
-                  <Ionicons name="pencil-outline" size={18} color={Colors.info} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDelete(item.id, item.name)} style={styles.iconBtn}>
-                  <Ionicons name="trash-outline" size={18} color={Colors.error} />
-                </TouchableOpacity>
+                <IconButton
+                  name="pencil-outline"
+                  variant="soft"
+                  size={34}
+                  iconSize={16}
+                  color={Colors.info}
+                  onPress={() => openEdit(item)}
+                  accessibilityLabel="Modifier"
+                />
+                <IconButton
+                  name="trash-outline"
+                  variant="plain"
+                  size={34}
+                  iconSize={16}
+                  color={Colors.error}
+                  onPress={() => handleDelete(item.id, item.name)}
+                  accessibilityLabel="Supprimer"
+                />
               </View>
             </View>
           )}
@@ -223,25 +236,23 @@ export default function AdminProducts() {
 
       {/* Add/Edit Modal */}
       <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaSection>
+        <SafeAreaView style={styles.modalSafe}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editing ? 'Modifier le produit' : 'Nouveau produit'}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
-                <Ionicons name="close" size={24} color={Colors.textPrimary} />
-              </TouchableOpacity>
+              <IconButton name="close" variant="plain" size={38} onPress={() => setShowModal(false)} accessibilityLabel="Fermer" />
             </View>
-            <ScrollView contentContainerStyle={styles.modalContent}>
+            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
               {[
-                { label: 'Nom *', key: 'name', placeholder: 'Ex: Couches Taille 2' },
-                { label: 'Marque *', key: 'brand', placeholder: 'Ex: Pampers' },
+                { label: 'Nom *', key: 'name', placeholder: 'Ex : Couches Taille 2' },
+                { label: 'Marque *', key: 'brand', placeholder: 'Ex : Pampers' },
                 { label: 'Description courte', key: 'shortDescription', placeholder: 'Résumé en une ligne' },
-                { label: 'Unité', key: 'unit', placeholder: 'Ex: paquet de 84' },
+                { label: 'Unité', key: 'unit', placeholder: 'Ex : paquet de 84' },
                 { label: 'Prix normal (€) *', key: 'price', placeholder: '0.00', keyboardType: 'decimal-pad' },
                 { label: 'Prix abonné (€) *', key: 'subscriptionPrice', placeholder: '0.00', keyboardType: 'decimal-pad' },
                 { label: 'Remise (%)', key: 'discountPercentage', placeholder: '10', keyboardType: 'decimal-pad' },
                 { label: 'Stock', key: 'stockCount', placeholder: '100', keyboardType: 'numeric' },
-                { label: 'Image URL', key: 'images', placeholder: 'https://...', value: form.images[0], onChange: (v: string) => setForm(p => ({ ...p, images: [v] })) },
+                { label: 'Image URL', key: 'images', placeholder: 'https://…', value: form.images[0], onChange: (v: string) => setForm(p => ({ ...p, images: [v] })) },
               ].map(field => (
                 <View key={field.key} style={{ marginBottom: 12 }}>
                   <Text style={styles.inputLabel}>{field.label}</Text>
@@ -258,33 +269,30 @@ export default function AdminProducts() {
 
               {/* Category */}
               <Text style={styles.inputLabel}>Catégorie</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {categories.map(cat => (
-                    <TouchableOpacity
-                      key={cat.id}
-                      style={[styles.chip, form.categoryId === cat.id && styles.chipActive]}
-                      onPress={() => setForm(p => ({ ...p, categoryId: cat.id }))}
-                    >
-                      <Text style={[styles.chipText, form.categoryId === cat.id && styles.chipTextActive]}>{cat.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
+              <ChipRow contentStyle={{ paddingBottom: 12, gap: 8 }}>
+                {categories.map(cat => (
+                  <Chip
+                    key={cat.id}
+                    label={cat.name}
+                    active={form.categoryId === cat.id}
+                    onPress={() => setForm(p => ({ ...p, categoryId: cat.id }))}
+                  />
+                ))}
+              </ChipRow>
 
               {/* Frequencies */}
               <Text style={styles.inputLabel}>Fréquences disponibles</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <ChipRow contentStyle={{ paddingBottom: 12, gap: 8 }}>
                 {FREQ_OPTIONS.map(f => (
-                  <TouchableOpacity
+                  <Chip
                     key={f.key}
-                    style={[styles.chip, form.availableFrequencies.includes(f.key) && styles.chipActive]}
+                    label={f.label}
+                    tone="sage"
+                    active={form.availableFrequencies.includes(f.key)}
                     onPress={() => toggleFreq(f.key)}
-                  >
-                    <Text style={[styles.chipText, form.availableFrequencies.includes(f.key) && styles.chipTextActive]}>{f.label}</Text>
-                  </TouchableOpacity>
+                  />
                 ))}
-              </View>
+              </ChipRow>
 
               {/* Badges */}
               <Text style={styles.inputLabel}>Badges</Text>
@@ -304,59 +312,121 @@ export default function AdminProducts() {
                 </View>
               ))}
 
-              <TouchableOpacity
-                style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+              <PrimaryButton
+                label={editing ? 'Enregistrer' : 'Créer le produit'}
                 onPress={handleSave}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color={Colors.textInverse} />
-                ) : (
-                  <Text style={styles.saveBtnText}>{editing ? 'Enregistrer' : 'Créer le produit'}</Text>
-                )}
-              </TouchableOpacity>
+                loading={saving}
+                fullWidth
+                style={{ marginTop: Spacing.lg }}
+              />
             </ScrollView>
           </KeyboardAvoidingView>
-        </SafeAreaSection>
+        </SafeAreaView>
       </Modal>
     </View>
   );
 }
 
-function SafeAreaSection({ children }: { children: React.ReactNode }) {
-  const { SafeAreaView } = require('react-native-safe-area-context');
-  return <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>{children}</SafeAreaView>;
+/** Small brand pill button (admin header CTA). */
+function PressableRow({ children, onPress }: { children: React.ReactNode; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.addBtn} onPress={onPress} activeOpacity={0.85}>
+      {children}
+    </TouchableOpacity>
+  );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#F8F9FA' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.borderLight, backgroundColor: Colors.surface },
-  pageTitle: { ...Typography.h4, color: Colors.textPrimary },
-  pageSubtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingHorizontal: 16, paddingVertical: 10 },
-  addBtnText: { color: Colors.textInverse, fontFamily: 'Poppins_600SemiBold', fontSize: 14 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: Colors.borderLight },
-  searchInput: { flex: 1, fontSize: 14, color: Colors.textPrimary },
-  list: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.xl },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: 8, ...Shadow.card },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
-  rowIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  rowName: { fontSize: 14, fontFamily: 'Poppins_600SemiBold', color: Colors.textPrimary },
-  rowBrand: { fontSize: 12, color: Colors.textTertiary, marginTop: 2 },
-  rowPrice: { fontSize: 13, color: Colors.primary, fontFamily: 'Poppins_600SemiBold', marginTop: 2 },
+  page: { flex: 1, backgroundColor: Colors.background },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+  pageTitle: { ...Type.display, color: Colors.textPrimary },
+  pageSubtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    ...Elevation.brand,
+  },
+  addBtnText: { color: Colors.textInverse, fontFamily: Font.semibold, fontSize: 14 },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: Spacing.screen,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    ...Elevation.xs,
+  },
+  searchInput: { flex: 1, ...Type.body, color: Colors.textPrimary, padding: 0 },
+  list: { paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, paddingBottom: Spacing.xxxl, gap: 10 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    ...Elevation.sm,
+  },
+  rowIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryPale,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowBody: { flex: 1 },
+  rowName: { ...Type.h3, color: Colors.textPrimary },
+  rowBrand: { ...Type.small, color: Colors.textTertiary, marginTop: 2 },
+  rowPrice: { fontFamily: Font.semibold, fontSize: 13, color: Colors.primaryDark, marginTop: 2 },
   rowActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  iconBtn: { padding: 8, borderRadius: 8 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.screen, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
-  modalTitle: { ...Typography.h4, color: Colors.textPrimary },
-  modalContent: { padding: Spacing.screen, paddingBottom: Spacing.xl },
-  inputLabel: { fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: Colors.textPrimary, marginBottom: 6 },
-  textInput: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, borderWidth: 1.5, borderColor: Colors.borderLight, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: Colors.textPrimary },
-  chip: { borderRadius: BorderRadius.pill, borderWidth: 1.5, borderColor: Colors.borderLight, paddingHorizontal: 12, paddingVertical: 6 },
-  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  chipText: { fontSize: 12, fontFamily: 'Poppins_500Medium', color: Colors.textSecondary },
-  chipTextActive: { color: Colors.textInverse },
-  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
-  toggleLabel: { fontSize: 14, color: Colors.textPrimary },
-  saveBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.lg, padding: 14, alignItems: 'center', marginTop: Spacing.lg },
-  saveBtnText: { color: Colors.textInverse, fontFamily: 'Poppins_600SemiBold', fontSize: 15 },
+  modalSafe: { flex: 1, backgroundColor: Colors.background },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.screen,
+    paddingVertical: Spacing.sm,
+  },
+  modalTitle: { ...Type.h2, color: Colors.textPrimary },
+  modalContent: { paddingHorizontal: Spacing.screen, paddingBottom: Spacing.xxxl },
+  inputLabel: { ...Type.smallStrong, color: Colors.textPrimary, marginBottom: 6 },
+  textInput: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    ...Type.body,
+    color: Colors.textPrimary,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  toggleLabel: { ...Type.body, color: Colors.textPrimary },
 });

@@ -1,93 +1,302 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Screen from '../../src/components/ui/Screen';
 import AppTextField from '../../src/components/ui/AppTextField';
 import PrimaryButton from '../../src/components/ui/PrimaryButton';
+import IconButton from '../../src/components/ui/IconButton';
+import { GradientCard } from '../../src/components/ui/GradientCard';
+import { authService } from '../../src/services/api';
 import { Colors } from '../../src/constants/colors';
-import { Typography, Spacing } from '../../src/constants/spacing';
+import { Elevation, Font, Radius, Spacing, Type } from '../../src/constants/theme';
+
+type Step = 'email' | 'reset' | 'done';
+
+const STEPS: { key: Step; label: string }[] = [
+  { key: 'email', label: 'Email' },
+  { key: 'reset', label: 'Code' },
+  { key: 'done', label: 'Terminé' },
+];
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [devCode, setDevCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSend = async () => {
-    if (!email.trim()) {
-      Alert.alert('Email requis', 'Veuillez saisir votre adresse email');
+  const sendCode = async () => {
+    setError('');
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
+      setError('Saisissez une adresse email valide');
       return;
     }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
-    setSent(true);
-    setLoading(false);
+    try {
+      const res = await authService.forgotPassword(email.trim().toLowerCase());
+      if (res.data?.devCode) setDevCode(res.data.devCode);
+      setStep('reset');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
-        <TouchableOpacity testID="forgot-back-btn" onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
-        </TouchableOpacity>
+  const resetPassword = async () => {
+    setError('');
+    if (code.trim().length !== 6) {
+      setError('Le code doit contenir 6 chiffres');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError('8 caractères minimum pour le nouveau mot de passe');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Les mots de passe ne correspondent pas');
+      return;
+    }
+    setLoading(true);
+    try {
+      await authService.resetPassword(email.trim().toLowerCase(), code.trim(), newPassword);
+      setStep('done');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Code invalide ou expiré');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        <View style={styles.iconWrap}>
-          <Ionicons name="lock-open-outline" size={48} color={Colors.primary} />
+  const activeIndex = STEPS.findIndex((item) => item.key === step);
+
+  return (
+    <Screen scroll background="blush">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.header}>
+          <IconButton
+            testID="forgot-back-btn"
+            name="arrow-back"
+            onPress={() => router.back()}
+            accessibilityLabel="Retour"
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>
+              {step === 'done' ? 'Mot de passe modifié' : 'Mot de passe oublié'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {step === 'email'
+                ? 'Recevez un code de vérification'
+                : step === 'reset'
+                  ? 'Saisissez le code et votre nouveau mot de passe'
+                  : 'Vous pouvez vous connecter'}
+            </Text>
+          </View>
         </View>
 
-        <Text style={styles.title}>Mot de passe oublié ?</Text>
-        <Text style={styles.subtitle}>
-          {sent
-            ? "Un email de réinitialisation a été envoyé si ce compte existe."
-            : "Saisissez votre email et nous vous enverrons un lien pour réinitialiser votre mot de passe."
-          }
-        </Text>
+        {/* Progress */}
+        <View style={styles.progress}>
+          {STEPS.map((item, index) => (
+            <View key={item.key} style={styles.progressItem}>
+              <View
+                style={[
+                  styles.progressDot,
+                  index <= activeIndex && styles.progressDotActive,
+                ]}
+              >
+                {index < activeIndex ? (
+                  <Ionicons name="checkmark" size={12} color={Colors.textInverse} />
+                ) : (
+                  <Text style={[styles.progressNumber, index === activeIndex && styles.progressNumberActive]}>
+                    {index + 1}
+                  </Text>
+                )}
+              </View>
+              <Text style={[styles.progressLabel, index === activeIndex && styles.progressLabelActive]}>
+                {item.label}
+              </Text>
+              {index < STEPS.length - 1 ? (
+                <View style={[styles.progressLine, index < activeIndex && styles.progressLineActive]} />
+              ) : null}
+            </View>
+          ))}
+        </View>
 
-        {!sent ? (
+        {step === 'done' ? (
           <>
-            <AppTextField
-              testID="forgot-email-input"
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="votre@email.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              icon="mail-outline"
-            />
+            <GradientCard colors="sage" contentStyle={styles.successCard}>
+              <View style={styles.successIcon}>
+                <Ionicons name="checkmark" size={26} color={Colors.textInverse} />
+              </View>
+              <Text style={styles.successTitle}>C’est fait ✨</Text>
+              <Text style={styles.successText}>
+                Votre mot de passe a bien été mis à jour. Connectez-vous avec vos nouveaux
+                identifiants.
+              </Text>
+            </GradientCard>
+
             <PrimaryButton
-              testID="forgot-send-btn"
-              label="Envoyer le lien"
-              onPress={handleSend}
-              loading={loading}
-              style={{ marginTop: Spacing.md }}
+              label="Se connecter"
+              icon="arrow-forward"
+              iconPosition="right"
+              onPress={() => router.replace('/(auth)/login')}
+              style={{ marginTop: Spacing.lg }}
             />
           </>
         ) : (
-          <View style={styles.successBox}>
-            <Ionicons name="checkmark-circle" size={32} color={Colors.success} />
-            <Text style={styles.successText}>Email envoyé ! Vérifiez votre boîte de réception.</Text>
+          <View style={styles.card}>
+            {step === 'email' ? (
+              <>
+                <AppTextField
+                  testID="forgot-email-input"
+                  label="Email du compte"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="votre@email.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  icon="mail-outline"
+                />
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <PrimaryButton
+                  testID="forgot-send-btn"
+                  label={loading ? 'Envoi…' : 'Recevoir mon code'}
+                  icon="paper-plane-outline"
+                  loading={loading}
+                  onPress={() => void sendCode()}
+                />
+              </>
+            ) : (
+              <>
+                <AppTextField
+                  label="Code à 6 chiffres"
+                  value={code}
+                  onChangeText={setCode}
+                  placeholder="123456"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  icon="keypad-outline"
+                />
+                {devCode ? (
+                  <View style={styles.devHint}>
+                    <Ionicons name="information-circle-outline" size={14} color="#4C7099" />
+                    <Text style={styles.devHintText}>
+                      Mode démo : votre code est {devCode}
+                    </Text>
+                  </View>
+                ) : null}
+                <AppTextField
+                  testID="forgot-new-password-input"
+                  label="Nouveau mot de passe"
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="8 caractères minimum"
+                  secureTextEntry
+                  secureToggle
+                  icon="lock-closed-outline"
+                />
+                <AppTextField
+                  label="Confirmer le mot de passe"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="••••••••"
+                  secureTextEntry
+                  secureToggle
+                  icon="lock-closed-outline"
+                />
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <PrimaryButton
+                  testID="forgot-reset-btn"
+                  label={loading ? 'Validation…' : 'Valider le nouveau mot de passe'}
+                  icon="checkmark"
+                  loading={loading}
+                  onPress={() => void resetPassword()}
+                />
+                <PrimaryButton
+                  label="Renvoyer le code"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => void sendCode()}
+                  style={{ marginTop: Spacing.sm }}
+                />
+              </>
+            )}
           </View>
         )}
-
-        <TouchableOpacity testID="forgot-back-login-btn" onPress={() => router.replace('/(auth)/login')} style={styles.backLogin}>
-          <Text style={styles.backLoginText}>← Retour à la connexion</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  container: { flex: 1, padding: Spacing.xl },
-  backBtn: { marginBottom: Spacing.xl },
-  iconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.lg, alignSelf: 'flex-start' },
-  title: { ...Typography.h2, color: Colors.textPrimary, marginBottom: 8 },
-  subtitle: { ...Typography.body, color: Colors.textSecondary, marginBottom: Spacing.xl, lineHeight: 24 },
-  successBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.successBg, borderRadius: 12, padding: Spacing.md, gap: 12, marginBottom: Spacing.lg },
-  successText: { flex: 1, ...Typography.body, color: Colors.success, fontFamily: 'Poppins_500Medium' },
-  backLogin: { marginTop: Spacing.lg },
-  backLoginText: { ...Typography.body, color: Colors.primary, fontFamily: 'Poppins_500Medium' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: Spacing.lg },
+  title: { ...Type.h1, color: Colors.textPrimary },
+  subtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  progress: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.lg },
+  progressItem: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  progressDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDotActive: { backgroundColor: Colors.primary, borderColor: Colors.primaryDark },
+  progressNumber: { fontFamily: Font.semibold, fontSize: 12, color: Colors.textTertiary },
+  progressNumberActive: { color: Colors.textInverse },
+  progressLabel: { fontFamily: Font.medium, fontSize: 12, color: Colors.textTertiary },
+  progressLabelActive: { color: Colors.textPrimary, fontFamily: Font.semibold },
+  progressLine: { flex: 1, height: 2, backgroundColor: Colors.borderLight, marginHorizontal: 8 },
+  progressLineActive: { backgroundColor: Colors.primaryLight },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.lg,
+    ...Elevation.md,
+  },
+  error: {
+    ...Type.small,
+    color: Colors.error,
+    backgroundColor: Colors.errorBg,
+    borderRadius: Radius.lg,
+    padding: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  devHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.infoBg,
+    borderRadius: Radius.lg,
+    padding: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  devHintText: { ...Type.small, color: '#4C7099', flex: 1 },
+  successCard: { alignItems: 'center', gap: 10, paddingVertical: Spacing.xl },
+  successIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successTitle: { ...Type.h2, color: Colors.textInverse },
+  successText: {
+    ...Type.small,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    paddingHorizontal: Spacing.md,
+  },
 });

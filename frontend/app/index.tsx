@@ -1,16 +1,18 @@
 import { Redirect } from 'expo-router';
+import { View, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../src/store/authStore';
-import { View, ActivityIndicator } from 'react-native';
-import { Colors } from '../src/constants/colors';
+import { Gradients } from '../src/constants/theme';
+import LoadingSpinner from '../src/components/ui/LoadingSpinner';
 
 export default function Index() {
   const { isAuthenticated, isLoading } = useAuthStore();
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
+      <LinearGradient colors={Gradients.blush} style={styles.loader}>
+        <LoadingSpinner fullScreen />
+      </LinearGradient>
     );
   }
 
@@ -20,3 +22,7 @@ export default function Index() {
 
   return <Redirect href="/(auth)/splash" />;
 }
+
+const styles = StyleSheet.create({
+  loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+});

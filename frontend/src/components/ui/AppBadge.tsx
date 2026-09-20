@@ -1,65 +1,104 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
-import { BorderRadius, Spacing, Typography } from '../../constants/spacing';
+import { Font, Radius, Type } from '../../constants/theme';
 
-type BadgeVariant = 'neutral' | 'success' | 'warning' | 'error' | 'info';
+export type BadgeVariant =
+  | 'neutral'
+  | 'primary'
+  | 'sage'
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'info'
+  | 'ink'
+  | 'glass';
 
 interface AppBadgeProps {
   label: string;
   variant?: BadgeVariant;
+  icon?: keyof typeof Ionicons.glyphMap;
+  size?: 'sm' | 'md';
   style?: ViewStyle;
 }
 
-export default function AppBadge({ label, variant = 'neutral', style }: AppBadgeProps) {
+/** Pill badge — statuses, badges dynamiques (recommandé / nouveau / stock). */
+export default function AppBadge({
+  label,
+  variant = 'neutral',
+  icon,
+  size = 'sm',
+  style,
+}: AppBadgeProps) {
+  const tone = VARIANTS[variant];
   return (
-    <View style={[styles.base, variantStyles[variant], style]}>
-      <Text style={[styles.label, labelStyles[variant]]}>{label}</Text>
+    <View style={[styles.base, size === 'md' && styles.baseMd, tone.container, style]}>
+      {icon ? <Ionicons name={icon} size={size === 'md' ? 13 : 11} color={tone.text} /> : null}
+      <Text
+        style={[styles.label, size === 'md' && styles.labelMd, { color: tone.text }]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     alignSelf: 'flex-start',
-    borderRadius: BorderRadius.pill,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.smd,
-    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
+  baseMd: { paddingHorizontal: 12, paddingVertical: 6, gap: 6 },
   label: {
-    ...Typography.caption,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: Font.semibold,
+    fontSize: 11,
+    letterSpacing: 0.1,
   },
+  labelMd: { ...Type.smallStrong, fontSize: 12.5 },
 });
 
-const variantStyles = StyleSheet.create({
+const VARIANTS: Record<BadgeVariant, { container: ViewStyle; text: string }> = {
   neutral: {
-    backgroundColor: Colors.surfaceAlt,
-    borderColor: Colors.borderLight,
+    container: { backgroundColor: Colors.surfaceAlt, borderWidth: 1, borderColor: Colors.borderLight },
+    text: Colors.textSecondary,
+  },
+  primary: {
+    container: { backgroundColor: Colors.primaryPale, borderWidth: 1, borderColor: Colors.primaryMuted },
+    text: Colors.primaryDark,
+  },
+  sage: {
+    container: { backgroundColor: Colors.accentSageSoft, borderWidth: 1, borderColor: Colors.accentLight },
+    text: '#5F7358',
   },
   success: {
-    backgroundColor: Colors.successBg,
-    borderColor: Colors.success,
+    container: { backgroundColor: Colors.successBg, borderWidth: 1, borderColor: Colors.accentLight },
+    text: '#4F7A61',
   },
   warning: {
-    backgroundColor: Colors.warningBg,
-    borderColor: Colors.warning,
+    container: { backgroundColor: Colors.warningBg, borderWidth: 1, borderColor: '#EFD9B4' },
+    text: '#9A7635',
   },
   error: {
-    backgroundColor: Colors.errorBg,
-    borderColor: Colors.error,
+    container: { backgroundColor: Colors.errorBg, borderWidth: 1, borderColor: '#F0C9C9' },
+    text: '#A85B5B',
   },
   info: {
-    backgroundColor: Colors.infoBg,
-    borderColor: Colors.info,
+    container: { backgroundColor: Colors.infoBg, borderWidth: 1, borderColor: '#C9DCEB' },
+    text: '#4C7099',
   },
-});
-
-const labelStyles = StyleSheet.create({
-  neutral: { color: Colors.textSecondary },
-  success: { color: Colors.success },
-  warning: { color: Colors.warning },
-  error: { color: Colors.error },
-  info: { color: Colors.info },
-});
+  ink: {
+    container: { backgroundColor: Colors.textPrimary },
+    text: Colors.textInverse,
+  },
+  glass: {
+    container: { backgroundColor: 'rgba(255,255,255,0.9)' },
+    text: Colors.textPrimary,
+  },
+};

@@ -5,6 +5,30 @@ All notable changes to EssentiElles will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — 2026-09-20 — Design « modern premium » ✨
+
+### Added — Design system v2
+- `frontend/src/constants/theme.ts` : point d'entrée unique des tokens (Gradients, Elevation compatible web, Type, Motion, Surfaces, Layout). `colors.ts` / `spacing.ts` restent réexportés pour la compatibilité.
+- Nouvelles primitives UI : `Screen` + `Atmosphere`, `PressableScale`, `IconButton`, `Chip`/`ChipRow`, `QuantityStepper`, `GradientCard`/`HeroCard`, `Sheet`, `ListRow`/`ListGroup`, `StatTile`, `ProgressSteps`, `OfflineBanner`.
+- Composants métier réécrits : `AppBadge` (9 variantes), `EmptyState`, `PrimaryButton`/`SecondaryButton`, `SkeletonCard` (box/ligne/carte/liste/grille), `StatusBadge`, `SectionHeader`, `ProductCard`, `OrderCard`.
+- `TabBar` flottante (blur + pastille animée) montée dans `app/(main)/_layout.tsx`.
+
+### Added — Fonctionnalités
+- **Sauter la prochaine livraison** : `POST /api/subscriptions/{id}/skip` (report d'un cycle, compteur `skippedDeliveries`, notification client) + `subscriptionService.skipNextDelivery`.
+- **Recommandations personnalisées locales** (`src/services/recommendations.ts`) basées sur la routine, les commandes, les favoris et les produits vus récemment, avec la raison affichée sur la carte ; produits complémentaires « Souvent associé » sur la fiche produit. Fonctionne hors connexion.
+- **Hors-ligne d'abord** : cache AsyncStorage (`livrella_cache:*`), rappels de livraison locaux, favoris, conseils sauvegardés, checklist maternité, préférences de notifications.
+- **FR/EN** : les libellés de navigation suivent la langue choisie dans le profil (infrastructure i18n `src/constants/strings.ts` + hook `useLang`).
+- Assets de marque locaux : logo, illustrations d'onboarding, visuels des guides.
+- Historique de livraisons modernisé (filtres par année, statistiques, tri par statut livré).
+
+### Changed
+- Tous les écrans (accueil, catalogue, fiche produit, panier/checkout, abonnements, plan, commandes, suivi, factures, favoris, conseils, notifications, offres, profil, adresses, paramètres, support, ticket, authentification, back-office admin) refondus sur les tokens v2 avec skeletons, états vides et micro-interactions.
+- En-têtes de sécurité assouplis hors production (`frame-ancestors`) pour permettre l'intégration en iframe de l'aperçu web.
+
+### Tests
+- Frontend : 8 suites / 56 tests (tokens de design, i18n, cache et rappels, stores locaux, guides, moteur de recommandations).
+- Backend : 19 tests E2E (dont 2 nouveaux sur le report de livraison).
+
 ## [1.1.0] — 2026-09-19 — Prêt pour la vente 🚀
 
 ### Security (critical)

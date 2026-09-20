@@ -1,24 +1,31 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  FlatList, Modal, TextInput, Alert, KeyboardAvoidingView,
-  Platform, RefreshControl
-} from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Screen from '../../../src/components/ui/Screen';
+import IconButton from '../../../src/components/ui/IconButton';
+import PrimaryButton from '../../../src/components/ui/PrimaryButton';
+import PressableScale from '../../../src/components/ui/PressableScale';
+import StatusBadge from '../../../src/components/ui/StatusBadge';
+import EmptyState from '../../../src/components/ui/EmptyState';
+import AppTextField from '../../../src/components/ui/AppTextField';
+import Sheet from '../../../src/components/ui/Sheet';
+import OfflineBanner from '../../../src/components/ui/OfflineBanner';
+import { Chip, ChipRow } from '../../../src/components/ui/Chip';
+import { SkeletonRows } from '../../../src/components/ui/SkeletonCard';
 import { supportService } from '../../../src/services/api';
 import { SupportTicket } from '../../../src/models/types';
-import PrimaryButton from '../../../src/components/ui/PrimaryButton';
-import EmptyState from '../../../src/components/ui/EmptyState';
-import LoadingSpinner from '../../../src/components/ui/LoadingSpinner';
-import StatusBadge from '../../../src/components/ui/StatusBadge';
 import { Colors } from '../../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../../src/constants/spacing';
+import { Elevation, Font, Radius, Spacing, Type } from '../../../src/constants/theme';
 
-interface FaqItem { id: string; question: string; answer: string; category: string; }
+interface FaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  category: string;
+}
 
-const CATEGORIES = [
+const TICKET_CATEGORIES = [
   { key: 'delivery', label: 'Livraison' },
   { key: 'subscription', label: 'Abonnement' },
   { key: 'payment', label: 'Paiement' },
@@ -26,9 +33,9 @@ const CATEGORIES = [
   { key: 'other', label: 'Autre' },
 ];
 
-function formatDate(d?: string) {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+function formatDate(value?: string) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
 export default function SupportScreen() {
@@ -39,229 +46,307 @@ export default function SupportScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [subject, setSubject] = useState('');
   const [category, setCategory] = useState('delivery');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      const [faqRes, ticketsRes] = await Promise.allSettled([
-        supportService.getFaq(),
-        supportService.getTickets(),
-      ]);
-      if (faqRes.status === 'fulfilled') setFaq(faqRes.value.data);
-      if (ticketsRes.status === 'fulfilled') setTickets(ticketsRes.value.data);
-    } catch {}
-    finally { setLoading(false); setRefreshing(false); }
+    const [faqRes, ticketsRes] = await Promise.allSettled([
+      supportService.getFaq(),
+      supportService.getTickets(),
+    ]);
+    if (faqRes.status === 'fulfilled') setFaq(faqRes.value.data as FaqItem[]);
+    if (ticketsRes.status === 'fulfilled') setTickets(ticketsRes.value.data as SupportTicket[]);
+    setLoading(false);
+    setRefreshing(false);
   }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const handleCreateTicket = async () => {
+  const createTicket = async () => {
     if (!subject.trim() || !message.trim()) {
-      Alert.alert('Champs requis', 'Veuillez remplir le sujet et le message.');
+      Alert.alert('Champs requis', 'Renseignez le sujet et votre message.');
       return;
     }
     setSubmitting(true);
     try {
       await supportService.createTicket({ subject, category, message });
-      setShowModal(false);
-      setSubject(''); setMessage(''); setCategory('delivery');
-      Alert.alert('✓ Ticket créé', 'Notre équipe vous répondra dans les 24h.');
-      load();
-    } catch (err: any) {
-      Alert.alert('Erreur', err.message);
+      setShowForm(false);
+      setSubject('');
+      setMessage('');
+      setCategory('delivery');
+      setTab('tickets');
+      await load();
+      Alert.alert('Message envoyé ✨', 'Notre équipe vous répond sous 24 h ouvrées.');
+    } catch (err) {
+      Alert.alert('Erreur', err instanceof Error ? err.message : 'Envoi impossible');
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) return <LoadingSpinner fullScreen />;
-
   return (
-    <SafeAreaView style={styles.safe}>
+    <Screen
+      scroll
+      tabBarSpace
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            void load();
+          }}
+          tintColor={Colors.primary}
+        />
+      }
+    >
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Aide & Support</Text>
-        <TouchableOpacity style={styles.newTicketBtn} onPress={() => setShowModal(true)}>
-          <Ionicons name="add" size={20} color={Colors.primary} />
-        </TouchableOpacity>
+        <IconButton name="arrow-back" onPress={() => router.back()} accessibilityLabel="Retour" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Aide & support</Text>
+          <Text style={styles.subtitle}>Réponse sous 24 h ouvrées</Text>
+        </View>
+        <IconButton name="add" variant="brand" onPress={() => setShowForm(true)} accessibilityLabel="Nouveau message" />
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabRow}>
-        <TouchableOpacity style={[styles.tabBtn, tab === 'faq' && styles.tabBtnActive]} onPress={() => setTab('faq')}>
-          <Text style={[styles.tabText, tab === 'faq' && styles.tabTextActive]}>FAQ</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabBtn, tab === 'tickets' && styles.tabBtnActive]} onPress={() => setTab('tickets')}>
-          <Text style={[styles.tabText, tab === 'tickets' && styles.tabTextActive]}>Mes tickets {tickets.length > 0 ? `(${tickets.length})` : ''}</Text>
-        </TouchableOpacity>
+      <OfflineBanner visible={false} />
+
+      <View style={styles.tabs}>
+        <PressableScale
+          onPress={() => setTab('faq')}
+          style={[styles.tab, tab === 'faq' && styles.tabActive]}
+          scaleTo={0.97}
+        >
+          <Text style={[styles.tabText, tab === 'faq' && styles.tabTextActive]}>Questions fréquentes</Text>
+        </PressableScale>
+        <PressableScale
+          onPress={() => setTab('tickets')}
+          style={[styles.tab, tab === 'tickets' && styles.tabActive]}
+          scaleTo={0.97}
+        >
+          <Text style={[styles.tabText, tab === 'tickets' && styles.tabTextActive]}>
+            Mes messages{tickets.length ? ` (${tickets.length})` : ''}
+          </Text>
+        </PressableScale>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={Colors.primary} />
-        }
-      >
-        {tab === 'faq' ? (
-          <>
-            {faq.map(item => (
-              <TouchableOpacity
+      {loading ? (
+        <SkeletonRows count={3} />
+      ) : tab === 'faq' ? (
+        <View style={{ gap: 10 }}>
+          {faq.map((item) => {
+            const open = expanded === item.id;
+            return (
+              <PressableScale
                 key={item.id}
+                onPress={() => setExpanded(open ? null : item.id)}
                 style={styles.faqItem}
-                onPress={() => setExpanded(expanded === item.id ? null : item.id)}
+                scaleTo={0.99}
               >
                 <View style={styles.faqHeader}>
                   <Text style={styles.faqQuestion}>{item.question}</Text>
                   <Ionicons
-                    name={expanded === item.id ? 'chevron-up' : 'chevron-down'}
-                    size={18}
+                    name={open ? 'chevron-up' : 'chevron-down'}
+                    size={17}
                     color={Colors.textTertiary}
                   />
                 </View>
-                {expanded === item.id && (
-                  <Text style={styles.faqAnswer}>{item.answer}</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={styles.contactCard} onPress={() => setShowModal(true)}>
-              <Ionicons name="chatbubble-ellipses-outline" size={28} color={Colors.primary} />
-              <Text style={styles.contactTitle}>Pas trouvé votre réponse ?</Text>
-              <Text style={styles.contactSub}>Contactez notre équipe support</Text>
-              <View style={styles.contactBtn}>
-                <Text style={styles.contactBtnText}>Créer un ticket</Text>
-              </View>
-            </TouchableOpacity>
-          </>
-        ) : (
-          tickets.length === 0 ? (
-            <EmptyState
-              icon="chatbubble-outline"
-              title="Aucun ticket"
-              description="Créez un ticket si vous avez besoin d'aide"
-              actionLabel="Créer un ticket"
-              onAction={() => setShowModal(true)}
-            />
-          ) : (
-            tickets.map(ticket => (
-              <TouchableOpacity
-                key={ticket.id}
-                style={styles.ticketCard}
-                onPress={() => router.push({ pathname: '/(main)/ticket', params: { id: ticket.id } } as any)}
-              >
-                <View style={styles.ticketHeader}>
-                  <Text style={styles.ticketNum}>{ticket.ticketNumber}</Text>
-                  <StatusBadge status={ticket.status} small />
-                </View>
-                <Text style={styles.ticketSubject} numberOfLines={1}>{ticket.subject}</Text>
-                <View style={styles.ticketFooter}>
-                  <Text style={styles.ticketCat}>{ticket.category}</Text>
-                  <Text style={styles.ticketDate}>{formatDate(ticket.createdAt)}</Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          )
-        )}
-      </ScrollView>
+                {open ? <Text style={styles.faqAnswer}>{item.answer}</Text> : null}
+              </PressableScale>
+            );
+          })}
 
-      {/* Create Ticket Modal */}
-      <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={styles.modal}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouveau ticket</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
-                <Ionicons name="close" size={24} color={Colors.textPrimary} />
-              </TouchableOpacity>
+          <View style={styles.contactCard}>
+            <Ionicons name="chatbubbles-outline" size={18} color={Colors.primaryDark} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactTitle}>Une autre question ?</Text>
+              <Text style={styles.contactText}>Écrivez-nous, nous répondons chaque jour.</Text>
             </View>
-            <ScrollView contentContainerStyle={styles.modalContent}>
-              <Text style={styles.inputLabel}>Sujet</Text>
-              <TextInput
-                style={styles.textInput}
-                value={subject}
-                onChangeText={setSubject}
-                placeholder="Décrivez brièvement votre problème"
-                placeholderTextColor={Colors.textPlaceholder}
-              />
-
-              <Text style={styles.inputLabel}>Catégorie</Text>
-              <View style={styles.catRow}>
-                {CATEGORIES.map(cat => (
-                  <TouchableOpacity
-                    key={cat.key}
-                    style={[styles.catChip, category === cat.key && styles.catChipActive]}
-                    onPress={() => setCategory(cat.key)}
-                  >
-                    <Text style={[styles.catChipText, category === cat.key && styles.catChipTextActive]}>{cat.label}</Text>
-                  </TouchableOpacity>
-                ))}
+            <PrimaryButton
+              label="Écrire"
+              size="sm"
+              fullWidth={false}
+              onPress={() => setShowForm(true)}
+            />
+          </View>
+        </View>
+      ) : tickets.length === 0 ? (
+        <EmptyState
+          icon="chatbubbles-outline"
+          tone="sage"
+          title="Aucun message"
+          description="Une question sur une livraison, un abonnement ou un paiement ? Écrivez-nous."
+          actionLabel="Créer un message"
+          onAction={() => setShowForm(true)}
+        />
+      ) : (
+        <View style={{ gap: 12 }}>
+          {tickets.map((ticket) => (
+            <PressableScale
+              key={ticket.id}
+              onPress={() => router.push({ pathname: '/(main)/(profile)/ticket', params: { id: ticket.id } } as never)}
+              style={styles.ticketCard}
+              scaleTo={0.985}
+            >
+              <View style={styles.ticketTop}>
+                <View style={styles.ticketIcon}>
+                  <Ionicons name="chatbubble-ellipses" size={16} color={Colors.primaryDark} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.ticketSubject} numberOfLines={1}>
+                    {ticket.subject}
+                  </Text>
+                  <Text style={styles.ticketMeta}>
+                    {ticket.ticketNumber} · {formatDate(ticket.updatedAt ?? ticket.createdAt)}
+                  </Text>
+                </View>
+                <StatusBadge status={ticket.status} small />
               </View>
+              <Text style={styles.ticketPreview} numberOfLines={2}>
+                {ticket.messages[ticket.messages.length - 1]?.message ?? ''}
+              </Text>
+              <View style={styles.ticketFooter}>
+                <Text style={styles.ticketCount}>{ticket.messages.length} message(s)</Text>
+                <View style={styles.openRow}>
+                  <Text style={styles.openText}>Ouvrir</Text>
+                  <Ionicons name="arrow-forward" size={14} color={Colors.primaryDark} />
+                </View>
+              </View>
+            </PressableScale>
+          ))}
+        </View>
+      )}
 
-              <Text style={styles.inputLabel}>Message</Text>
-              <TextInput
-                style={[styles.textInput, styles.textArea]}
-                value={message}
-                onChangeText={setMessage}
-                placeholder="Décrivez votre problème en détail..."
-                placeholderTextColor={Colors.textPlaceholder}
-                multiline
-                numberOfLines={5}
-                textAlignVertical="top"
+      <Sheet
+        visible={showForm}
+        onClose={() => setShowForm(false)}
+        title="Écrire au support"
+        subtitle="Nous répondons sous 24 h ouvrées"
+        footer={
+          <PrimaryButton
+            label={submitting ? 'Envoi…' : 'Envoyer mon message'}
+            icon="send"
+            loading={submitting}
+            onPress={() => void createTicket()}
+          />
+        }
+      >
+        <View style={{ gap: Spacing.sm }}>
+          <AppTextField
+            label="Sujet"
+            value={subject}
+            onChangeText={setSubject}
+            placeholder="Ma livraison est en retard"
+            icon="create-outline"
+          />
+          <Text style={styles.chipsLabel}>Catégorie</Text>
+          <ChipRow contentStyle={{ paddingHorizontal: 0, gap: 8 }}>
+            {TICKET_CATEGORIES.map((item) => (
+              <Chip
+                key={item.key}
+                label={item.label}
+                active={category === item.key}
+                onPress={() => setCategory(item.key)}
               />
-
-              <PrimaryButton label="Envoyer le ticket" onPress={handleCreateTicket} loading={submitting} style={{ marginTop: Spacing.lg }} />
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
+            ))}
+          </ChipRow>
+          <AppTextField
+            label="Message"
+            value={message}
+            onChangeText={setMessage}
+            placeholder="Décrivez votre situation…"
+            multiline
+            numberOfLines={5}
+            style={{ minHeight: 120 }}
+          />
+        </View>
+      </Sheet>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: 12 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center', ...Shadow.card },
-  title: { ...Typography.h3, color: Colors.textPrimary, flex: 1 },
-  newTicketBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center' },
-  tabRow: { flexDirection: 'row', marginHorizontal: Spacing.screen, marginBottom: Spacing.sm, backgroundColor: Colors.borderLight, borderRadius: BorderRadius.pill, padding: 4 },
-  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: BorderRadius.pill },
-  tabBtnActive: { backgroundColor: Colors.surface, ...Shadow.card },
-  tabText: { fontSize: 14, fontFamily: 'Poppins_500Medium', color: Colors.textTertiary },
-  tabTextActive: { color: Colors.primary, fontFamily: 'Poppins_600SemiBold' },
-  content: { padding: Spacing.screen, paddingBottom: Spacing.xl },
-  faqItem: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.sm, ...Shadow.card },
-  faqHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  faqQuestion: { flex: 1, ...Typography.bodySmall, color: Colors.textPrimary, fontFamily: 'Poppins_600SemiBold', marginRight: 8 },
-  faqAnswer: { ...Typography.body, color: Colors.textSecondary, marginTop: Spacing.sm, lineHeight: 22 },
-  contactCard: { backgroundColor: Colors.primaryPale, borderRadius: BorderRadius.lg, padding: Spacing.xl, alignItems: 'center', marginTop: Spacing.md },
-  contactTitle: { ...Typography.subtitle, color: Colors.primaryDark, marginTop: Spacing.sm, fontFamily: 'Poppins_600SemiBold' },
-  contactSub: { fontSize: 13, color: Colors.textSecondary, marginTop: 4 },
-  contactBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.pill, paddingHorizontal: 20, paddingVertical: 10, marginTop: Spacing.md },
-  contactBtnText: { fontSize: 13, color: Colors.textInverse, fontFamily: 'Poppins_600SemiBold' },
-  ticketCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.sm, ...Shadow.card },
-  ticketHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  ticketNum: { fontSize: 12, color: Colors.textTertiary, fontFamily: 'Poppins_500Medium' },
-  ticketSubject: { ...Typography.bodySmall, color: Colors.textPrimary, fontFamily: 'Poppins_600SemiBold', marginBottom: 8 },
-  ticketFooter: { flexDirection: 'row', justifyContent: 'space-between' },
-  ticketCat: { fontSize: 11, color: Colors.primary, fontFamily: 'Poppins_500Medium' },
-  ticketDate: { fontSize: 11, color: Colors.textTertiary },
-  modal: { flex: 1, backgroundColor: Colors.background },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.screen, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
-  modalTitle: { ...Typography.h4, color: Colors.textPrimary },
-  modalContent: { padding: Spacing.screen, paddingBottom: Spacing.xl },
-  inputLabel: { fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: Colors.textPrimary, marginBottom: 6, marginTop: Spacing.md },
-  textInput: { backgroundColor: Colors.surface, borderRadius: BorderRadius.md, borderWidth: 1.5, borderColor: Colors.borderLight, paddingHorizontal: 14, paddingVertical: 12, ...Typography.body, color: Colors.textPrimary },
-  textArea: { minHeight: 120, paddingTop: 12 },
-  catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  catChip: { borderRadius: BorderRadius.pill, borderWidth: 1.5, borderColor: Colors.borderLight, paddingHorizontal: 12, paddingVertical: 6 },
-  catChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  catChipText: { fontSize: 12, fontFamily: 'Poppins_500Medium', color: Colors.textSecondary },
-  catChipTextActive: { color: Colors.textInverse },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: Spacing.lg },
+  title: { ...Type.h1, color: Colors.textPrimary },
+  subtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: Radius.full,
+    padding: 4,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  tab: {
+    flex: 1,
+    height: 38,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabActive: { backgroundColor: Colors.surface, ...Elevation.xs },
+  tabText: { fontFamily: Font.medium, fontSize: 13, color: Colors.textSecondary },
+  tabTextActive: { fontFamily: Font.semibold, color: Colors.textPrimary },
+  faqItem: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    ...Elevation.xs,
+  },
+  faqHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  faqQuestion: { ...Type.bodyStrong, color: Colors.textPrimary, flex: 1 },
+  faqAnswer: { ...Type.small, color: Colors.textSecondary, marginTop: Spacing.sm, lineHeight: 20 },
+  contactCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: Spacing.md,
+    backgroundColor: Colors.primaryPale,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.primaryMuted,
+    padding: Spacing.md,
+  },
+  contactTitle: { ...Type.bodyStrong, color: Colors.textPrimary },
+  contactText: { ...Type.small, color: Colors.textSecondary, marginTop: 1 },
+  ticketCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+    ...Elevation.sm,
+  },
+  ticketTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  ticketIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: Colors.primaryPale,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ticketSubject: { ...Type.bodyStrong, color: Colors.textPrimary },
+  ticketMeta: { ...Type.small, color: Colors.textTertiary, marginTop: 1 },
+  ticketPreview: { ...Type.small, color: Colors.textSecondary },
+  ticketFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+    paddingTop: Spacing.sm,
+  },
+  ticketCount: { ...Type.small, color: Colors.textTertiary },
+  openRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  openText: { fontFamily: Font.semibold, fontSize: 12.5, color: Colors.primaryDark },
+  chipsLabel: { ...Type.smallStrong, color: Colors.textSecondary },
 });

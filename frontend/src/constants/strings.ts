@@ -15,8 +15,11 @@ const T = {
   home: { fr: 'Accueil', en: 'Home' },
   catalog: { fr: 'Catalogue', en: 'Catalog' },
   subscriptions: { fr: 'Abonnements', en: 'Subscriptions' },
+  subscriptionTab: { fr: 'Abonnement', en: 'Plan' },
   orders: { fr: 'Commandes', en: 'Orders' },
   profile: { fr: 'Profil', en: 'Profile' },
+  guides: { fr: 'Conseils', en: 'Tips' },
+  favorites: { fr: 'Favoris', en: 'Favorites' },
 
   // Auth
   login: { fr: 'Connexion', en: 'Login' },
@@ -195,7 +198,8 @@ const T = {
   errorPasswordMatch: { fr: 'Les mots de passe ne correspondent pas', en: 'Passwords do not match' },
 };
 
-// Translation function
+// Translation function — reads the active language at call time so it stays
+// in sync with the auth store without a manual `setLanguage()` call.
 export function t(key: keyof typeof T, params?: Record<string, string | number>): string {
   const entry = T[key];
   if (!entry) return key;
@@ -207,5 +211,11 @@ export function t(key: keyof typeof T, params?: Record<string, string | number>)
   }
   return text;
 }
+
+export function hasTranslation(key: string): key is keyof typeof T {
+  return Object.prototype.hasOwnProperty.call(T, key);
+}
+
+export type TranslationKey = keyof typeof T;
 
 export default T;

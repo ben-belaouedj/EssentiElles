@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_UNREACHABLE_MESSAGE, getApiBaseUrl } from '../constants/api';
+import { reportNetworkFailure, useConnectivityStore } from '../store/connectivityStore';
 
 const api = axios.create({
   baseURL: getApiBaseUrl(),
@@ -17,10 +18,14 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Uniform error handling
+// Uniform error handling + offline detection
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    useConnectivityStore.getState().reportSuccess();
+    return response;
+  },
   (error) => {
+    if (!error.response) reportNetworkFailure();
     const message =
       (!error.response && error.message === 'Network Error' && API_UNREACHABLE_MESSAGE) ||
       error.response?.data?.detail ||
@@ -82,6 +87,7 @@ export const subscriptionService = {
   update: (id: string, data: any) => api.put(`/subscriptions/${id}`, data),
   pause: (id: string) => api.post(`/subscriptions/${id}/pause`),
   resume: (id: string) => api.post(`/subscriptions/${id}/resume`),
+  skipNextDelivery: (id: string) => api.post(`/subscriptions/${id}/skip`),
   cancel: (id: string) => api.delete(`/subscriptions/${id}`),
 };
 

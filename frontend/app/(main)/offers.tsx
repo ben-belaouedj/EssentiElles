@@ -1,96 +1,122 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import React from 'react';
+import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import Screen from '../../src/components/ui/Screen';
+import IconButton from '../../src/components/ui/IconButton';
+import PressableScale from '../../src/components/ui/PressableScale';
+import EmptyState from '../../src/components/ui/EmptyState';
+import AppBadge from '../../src/components/ui/AppBadge';
+import { SkeletonRows } from '../../src/components/ui/SkeletonCard';
+import { useOfflineQuery } from '../../src/hooks/useOfflineQuery';
 import { offerService } from '../../src/services/api';
 import { Offer } from '../../src/models/types';
-import EmptyState from '../../src/components/ui/EmptyState';
-import LoadingSpinner from '../../src/components/ui/LoadingSpinner';
 import { Colors } from '../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../src/constants/spacing';
+import { Elevation, Font, Radius, Spacing, Type } from '../../src/constants/theme';
 
 export default function OffersScreen() {
   const router = useRouter();
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await offerService.getAll();
-      setOffers(res.data);
-    } catch {}
-    finally { setLoading(false); setRefreshing(false); }
-  }, []);
-
-  useEffect(() => { load(); }, []);
+  const query = useOfflineQuery<Offer[]>(
+    () => offerService.getAll().then((res) => res.data as Offer[]),
+    { cacheKey: 'offers' }
+  );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <Screen
+      scroll
+      tabBarSpace
+      refreshControl={
+        <RefreshControl
+          refreshing={query.refreshing}
+          onRefresh={() => void query.refresh()}
+          tintColor={Colors.primary}
+        />
+      }
+    >
       <View style={styles.header}>
-        <Text style={styles.title}>Offres du moment 🎁</Text>
+        <IconButton name="arrow-back" onPress={() => router.back()} accessibilityLabel="Retour" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Offres du moment</Text>
+          <Text style={styles.subtitle}>Profitez-en avant la fin de la promo</Text>
+        </View>
       </View>
 
-      {loading ? (
-        <LoadingSpinner fullScreen />
+      {query.loading && !query.data ? (
+        <SkeletonRows count={2} />
+      ) : (query.data ?? []).length === 0 ? (
+        <EmptyState
+          icon="pricetag-outline"
+          tone="sage"
+          title="Pas d’offre en cours"
+          description="Revenez bientôt : nous préparons de belles surprises."
+          actionLabel="Voir le catalogue"
+          onAction={() => router.push('/(main)/catalog' as never)}
+        />
       ) : (
-        <FlatList
-          data={offers}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); load(); }}
-              tintColor={Colors.primary}
-            />
-          }
-          ListEmptyComponent={
-            <EmptyState
-              icon="pricetag-outline"
-              title="Aucune offre"
-              description="Revenez bientôt pour découvrir nos promotions"
-            />
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, { backgroundColor: item.color || Colors.primaryPale }]}
-              onPress={() => router.push('/(main)/catalog' as any)}
-              activeOpacity={0.9}
+        <View style={{ gap: 14 }}>
+          {(query.data ?? []).map((offer) => (
+            <PressableScale
+              key={offer.id}
+              onPress={() => router.push('/(main)/catalog' as never)}
+              style={[styles.card, { backgroundColor: offer.color || Colors.primaryPale }]}
+              scaleTo={0.985}
             >
               <View style={styles.cardTop}>
-                {item.badgeText && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.badgeText}</Text>
-                  </View>
-                )}
-                <Text style={styles.discount}>-{item.discount}%</Text>
+                <AppBadge
+                  label={offer.badgeText || `-${offer.discount}%`}
+                  variant="ink"
+                  icon="pricetag"
+                  size="md"
+                />
+                <View style={styles.discountCircle}>
+                  <Text style={styles.discountValue}>{offer.discount}%</Text>
+                  <Text style={styles.discountLabel}>économisés</Text>
+                </View>
               </View>
-              <Text style={styles.offerTitle}>{item.title}</Text>
-              <Text style={styles.offerDesc} numberOfLines={3}>{item.description}</Text>
+
+              <Text style={styles.cardTitle}>{offer.title}</Text>
+              <Text style={styles.cardDescription}>{offer.description}</Text>
+
               <View style={styles.cta}>
-                <Text style={styles.ctaText}>Découvrir →</Text>
+                <Text style={styles.ctaText}>J’en profite</Text>
+                <Ionicons name="arrow-forward" size={14} color={Colors.textPrimary} />
               </View>
-            </TouchableOpacity>
-          )}
-        />
+            </PressableScale>
+          ))}
+        </View>
       )}
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: { paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, paddingBottom: Spacing.sm },
-  title: { ...Typography.h3, color: Colors.textPrimary },
-  list: { padding: Spacing.screen, paddingBottom: Spacing.xl },
-  card: { borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.md, minHeight: 160, ...Shadow.card },
-  cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm },
-  badge: { backgroundColor: Colors.primary, borderRadius: BorderRadius.pill, paddingHorizontal: 10, paddingVertical: 4, marginRight: 10 },
-  badgeText: { fontSize: 11, color: Colors.textInverse, fontFamily: 'Poppins_600SemiBold' },
-  discount: { fontSize: 40, fontFamily: 'Poppins_700Bold', color: Colors.primaryDark },
-  offerTitle: { ...Typography.h4, color: Colors.textPrimary, marginBottom: 6 },
-  offerDesc: { ...Typography.body, color: Colors.textSecondary },
-  cta: { marginTop: Spacing.md, alignSelf: 'flex-start', borderBottomWidth: 2, borderBottomColor: Colors.primary },
-  ctaText: { fontSize: 14, color: Colors.primaryDark, fontFamily: 'Poppins_600SemiBold' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: Spacing.lg },
+  title: { ...Type.h1, color: Colors.textPrimary },
+  subtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  card: {
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.lg,
+    gap: 8,
+    ...Elevation.sm,
+  },
+  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  discountCircle: { alignItems: 'center' },
+  discountValue: { fontFamily: Font.bold, fontSize: 22, color: Colors.textPrimary },
+  discountLabel: { fontFamily: Font.medium, fontSize: 10.5, color: Colors.textSecondary },
+  cardTitle: { ...Type.h2, color: Colors.textPrimary },
+  cardDescription: { ...Type.small, color: Colors.textSecondary },
+  cta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: Radius.full,
+    paddingHorizontal: 14,
+    height: 36,
+    marginTop: 4,
+  },
+  ctaText: { fontFamily: Font.semibold, fontSize: 12.5, color: Colors.textPrimary },
 });

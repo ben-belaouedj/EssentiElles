@@ -1,9 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Switch, RefreshControl, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Alert, Switch, RefreshControl, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { adminService } from '../../src/services/api';
 import { Colors } from '../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../src/constants/spacing';
+import { Radius, Spacing } from '../../src/constants/spacing';
+import { Elevation, Font, Type } from '../../src/constants/theme';
+import Screen from '../../src/components/ui/Screen';
+import AppBadge from '../../src/components/ui/AppBadge';
+import EmptyState from '../../src/components/ui/EmptyState';
+import { SkeletonListItem } from '../../src/components/ui/SkeletonCard';
+import StatTile from '../../src/components/ui/StatTile';
 
 function formatDate(d?: string) {
   if (!d) return '—';
@@ -34,7 +40,7 @@ export default function AdminUsers() {
         { text: current ? 'Désactiver' : 'Activer', onPress: async () => {
           try { await adminService.toggleUser(id); load(); }
           catch { Alert.alert('Erreur', 'Impossible de modifier'); }
-        }}
+        }},
       ]
     );
   };
@@ -43,90 +49,145 @@ export default function AdminUsers() {
     `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(search.toLowerCase())
   );
 
-  const customers = users.filter(u => u.role === 'customer').length;
-  const admins = users.filter(u => u.role === 'admin').length;
+  const customers = users.filter(u => u.role === 'customer');
+  const admins = users.filter(u => u.role === 'admin');
+  const suspended = users.filter(u => u.isActive === false);
 
   return (
-    <View style={styles.page}>
+    <Screen
+      background="blush"
+      scroll
+      tabBarSpace
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => { setRefreshing(true); load(); }}
+          tintColor={Colors.primary}
+        />
+      }
+    >
       <View style={styles.header}>
-        <View>
-          <Text style={styles.pageTitle}>Gestion des utilisateurs</Text>
-          <Text style={styles.pageSubtitle}>{customers} client(s) — {admins} admin(s)</Text>
-        </View>
+        <Text style={styles.pageTitle}>Utilisateurs</Text>
+        <Text style={styles.pageSubtitle}>{users.length} compte{users.length > 1 ? 's' : ''} enregistré{users.length > 1 ? 's' : ''}</Text>
+      </View>
+
+      <View style={styles.stats}>
+        <StatTile icon="people-outline" label="Clientes" value={customers.length} tone="primary" style={styles.stat} />
+        <StatTile icon="shield-checkmark-outline" label="Admins" value={admins.length} tone="sage" style={styles.stat} />
+        <StatTile icon="pause-circle-outline" label="Suspendus" value={suspended.length} tone="amber" style={styles.stat} />
       </View>
 
       <View style={styles.searchRow}>
-        <Ionicons name="search-outline" size={16} color={Colors.textTertiary} />
+        <Ionicons name="search-outline" size={17} color={Colors.textTertiary} />
         <TextInput
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Rechercher par nom ou email..."
+          placeholder="Rechercher par nom ou email…"
           placeholderTextColor={Colors.textPlaceholder}
         />
+        {search ? (
+          <Ionicons name="close-circle" size={17} color={Colors.textTertiary} onPress={() => setSearch('')} />
+        ) : null}
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.primary} />
+        <View style={styles.list}>
+          <SkeletonListItem />
+          <SkeletonListItem />
+          <SkeletonListItem />
+        </View>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon="search-outline" title="Aucun résultat" description="Essayez un autre nom ou email." />
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={Colors.primary} />
-          }
-          renderItem={({ item }) => {
+        <View style={styles.list}>
+          {filtered.map(item => {
             const initials = `${(item.firstName || '')[0] || ''}${(item.lastName || '')[0] || ''}`.toUpperCase();
+            const isAdmin = item.role === 'admin';
+            const active = item.isActive !== false;
+
             return (
-              <View style={styles.row}>
-                <View style={styles.rowLeft}>
-                  <View style={[styles.avatar, item.role === 'admin' && { backgroundColor: Colors.primary }]}>
-                    <Text style={styles.avatarText}>{initials}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={styles.rowName}>{item.firstName} {item.lastName}</Text>
-                      {item.role === 'admin' && (
-                        <View style={styles.adminBadge}><Text style={styles.adminBadgeText}>Admin</Text></View>
-                      )}
-                    </View>
-                    <Text style={styles.rowEmail}>{item.email}</Text>
-                    <Text style={styles.rowDate}>Inscrit le {formatDate(item.createdAt)}</Text>
-                  </View>
+              <View key={item.id} style={[styles.row, !active && styles.rowMuted]}>
+                <View style={[styles.avatar, isAdmin && styles.avatarAdmin]}>
+                  <Text style={styles.avatarText}>{initials || '?'}</Text>
                 </View>
-                {item.role !== 'admin' && (
+
+                <View style={styles.rowBody}>
+                  <View style={styles.rowNameRow}>
+                    <Text style={styles.rowName} numberOfLines={1}>
+                      {item.firstName} {item.lastName}
+                    </Text>
+                    {isAdmin ? <AppBadge label="Admin" variant="primary" size="sm" /> : null}
+                    {!active ? <AppBadge label="Suspendu" variant="neutral" size="sm" /> : null}
+                  </View>
+                  <Text style={styles.rowEmail} numberOfLines={1}>{item.email}</Text>
+                  <Text style={styles.rowDate}>Inscrit le {formatDate(item.createdAt)}</Text>
+                </View>
+
+                {!isAdmin ? (
                   <Switch
-                    value={item.isActive !== false}
-                    onValueChange={() => handleToggle(item.id, `${item.firstName}`, item.isActive !== false)}
+                    value={active}
+                    onValueChange={() => handleToggle(item.id, `${item.firstName}`, active)}
                     trackColor={{ false: Colors.borderMedium, true: Colors.primaryLight }}
-                    thumbColor={item.isActive !== false ? Colors.primary : Colors.textTertiary}
+                    thumbColor={active ? Colors.primary : Colors.textTertiary}
                   />
-                )}
+                ) : null}
               </View>
             );
-          }}
-        />
+          })}
+        </View>
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#F8F9FA' },
-  header: { padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.borderLight, backgroundColor: Colors.surface },
-  pageTitle: { ...Typography.h4, color: Colors.textPrimary },
-  pageSubtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: Spacing.md, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: Colors.borderLight },
-  searchInput: { flex: 1, fontSize: 14, color: Colors.textPrimary },
-  list: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.xl },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: 8, ...Shadow.card },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  avatarText: { fontSize: 16, fontFamily: 'Poppins_600SemiBold', color: Colors.textInverse },
-  rowName: { fontSize: 14, fontFamily: 'Poppins_600SemiBold', color: Colors.textPrimary },
-  adminBadge: { backgroundColor: Colors.primaryPale, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  adminBadgeText: { fontSize: 10, color: Colors.primary, fontFamily: 'Poppins_600SemiBold' },
-  rowEmail: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  rowDate: { fontSize: 11, color: Colors.textTertiary, marginTop: 2 },
+  content: { paddingBottom: Spacing.xxl },
+  header: { paddingTop: Spacing.md, paddingBottom: Spacing.lg },
+  pageTitle: { ...Type.display, color: Colors.textPrimary },
+  pageSubtitle: { ...Type.body, color: Colors.textSecondary, marginTop: 4 },
+  stats: { flexDirection: 'row', gap: 10, marginBottom: Spacing.md },
+  stat: { flex: 1 },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    ...Elevation.xs,
+  },
+  searchInput: { flex: 1, ...Type.body, color: Colors.textPrimary, padding: 0 },
+  list: { gap: 10, marginTop: Spacing.md },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    ...Elevation.sm,
+  },
+  rowMuted: { opacity: 0.62 },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.accentSageSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarAdmin: { backgroundColor: Colors.primary },
+  avatarText: { fontFamily: Font.semibold, fontSize: 15, color: Colors.textInverse },
+  rowBody: { flex: 1 },
+  rowNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  rowName: { ...Type.h3, color: Colors.textPrimary, flexShrink: 1 },
+  rowEmail: { ...Type.small, color: Colors.textSecondary, marginTop: 3 },
+  rowDate: { ...Type.small, color: Colors.textTertiary, marginTop: 1 },
 });

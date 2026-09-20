@@ -374,3 +374,73 @@ async def test_invalid_order_status_rejected(client, admin_token):
         json={"status": "not_a_status"},
     )
     assert res.status_code == 400
+
+
+# ──────────────────────── SKIP NEXT DELIVERY ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_skip_next_delivery_postpones_and_notifies(client, auth_headers):
+    """Skipping a box pushes the next delivery one cycle later + notifies."""
+    product = await _first_product(client)
+    await _add_address(client, auth_headers)
+    addr_id = (await client.get("/api/addresses", headers=auth_headers)).json()[0]["id"]
+
+    created = await client.post(
+        "/api/subscriptions",
+        headers=auth_headers,
+        json={
+            "productId": product["id"],
+            "addressId": addr_id,
+            "frequency": "monthly",
+            "quantity": 1,
+        },
+    )
+    assert created.status_code == 200, created.text
+    sub = created.json()
+    original_next = sub["nextDeliveryDate"]
+
+    skipped = await client.post(
+        f"/api/subscriptions/{sub['id']}/skip", headers=auth_headers
+    )
+    assert skipped.status_code == 200, skipped.text
+    updated = skipped.json()
+
+    assert updated["nextDeliveryDate"] > original_next
+    assert updated["skippedDeliveries"] == 1
+    assert updated["status"] == "active"
+
+    notifications = (
+        await client.get("/api/notifications", headers=auth_headers)
+    ).json()
+    assert any("report" in n["title"].lower() for n in notifications)
+
+
+@pytest.mark.asyncio
+async def test_skip_next_delivery_requires_active_subscription(client, auth_headers):
+    product = await _first_product(client)
+    await _add_address(client, auth_headers)
+    addr_id = (await client.get("/api/addresses", headers=auth_headers)).json()[0]["id"]
+
+    created = await client.post(
+        "/api/subscriptions",
+        headers=auth_headers,
+        json={
+            "productId": product["id"],
+            "addressId": addr_id,
+            "frequency": "weekly",
+            "quantity": 1,
+        },
+    )
+    sub = created.json()
+    await client.post(f"/api/subscriptions/{sub['id']}/pause", headers=auth_headers)
+
+    blocked = await client.post(
+        f"/api/subscriptions/{sub['id']}/skip", headers=auth_headers
+    )
+    assert blocked.status_code == 400
+
+    other = await client.post(
+        "/api/subscriptions/000000000000000000000000/skip", headers=auth_headers
+    )
+    assert other.status_code in (400, 404)

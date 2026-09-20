@@ -2,9 +2,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { adminService } from '../../src/services/api';
 import { Colors } from '../../src/constants/colors';
 import { Typography, Spacing, BorderRadius, Shadow } from '../../src/constants/spacing';
+import { Elevation, Type } from '../../src/constants/theme';
 
 interface Stats {
   usersCount: number;
@@ -56,17 +58,23 @@ export default function AdminDashboard() {
       </View>
 
       {/* Revenue highlight */}
-      <View style={styles.revenueCard}>
+      <LinearGradient
+        colors={['#C6949D', '#B5838D', '#8F5A64']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.revenueCard}
+      >
         <View>
-          <Text style={styles.revenueLabel}>Chiffre d'affaires total</Text>
+          <Text style={styles.revenueLabel}>Chiffre d’affaires total</Text>
           <Text style={styles.revenueAmount}>
             {(stats?.totalRevenue ?? 0).toFixed(2)} €
           </Text>
+          <Text style={styles.revenueHint}>Toutes commandes confondues</Text>
         </View>
         <View style={styles.revenueIcon}>
-          <Ionicons name="trending-up-outline" size={32} color={Colors.success} />
+          <Ionicons name="trending-up" size={26} color={Colors.textInverse} />
         </View>
-      </View>
+      </LinearGradient>
 
       {/* KPI Grid */}
       <View style={styles.kpiGrid}>
@@ -107,31 +115,37 @@ export default function AdminDashboard() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  page: { flex: 1, backgroundColor: '#F8F9FA' },
+  page: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.lg, paddingBottom: Spacing.xl },
   pageHeader: { marginBottom: Spacing.lg },
   pageTitle: { ...Typography.h3, color: Colors.textPrimary },
   pageSubtitle: { fontSize: 14, color: Colors.textSecondary, marginTop: 4 },
   revenueCard: {
-    backgroundColor: Colors.success + '15',
-    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+    ...Elevation.brand,
+    borderRadius: BorderRadius.xxl,
     padding: Spacing.lg,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.lg,
-    borderWidth: 1, borderColor: Colors.success + '30',
   },
-  revenueLabel: { fontSize: 13, color: Colors.success, fontFamily: 'Poppins_500Medium' },
-  revenueAmount: { fontSize: 32, fontFamily: 'Poppins_700Bold', color: Colors.success, marginTop: 4 },
-  revenueIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: Colors.successBg, alignItems: 'center', justifyContent: 'center' },
+  revenueLabel: { fontSize: 12.5, color: 'rgba(255,255,255,0.88)', fontFamily: 'Poppins_500Medium' },
+  revenueHint: { fontSize: 11.5, color: 'rgba(255,255,255,0.72)', marginTop: 4, fontFamily: 'Poppins_400Regular' },
+  revenueAmount: { fontSize: 32, fontFamily: 'Poppins_700Bold', color: Colors.textInverse, marginTop: 4 },
+  revenueIcon: {
+    width: 54, height: 54, borderRadius: 27,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: Spacing.lg },
   kpiCard: {
-    width: '47%', borderRadius: BorderRadius.xl,
-    padding: Spacing.md, ...Shadow.card,
+    width: '47%', borderRadius: BorderRadius.xxl,
+    padding: Spacing.md, borderWidth: 1, borderColor: Colors.borderLight,
+    ...Elevation.sm,
   },
-  kpiIconWrap: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  kpiValue: { fontSize: 28, fontFamily: 'Poppins_700Bold', color: Colors.textPrimary },
+  kpiIconWrap: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  kpiValue: { ...Type.h1, color: Colors.textPrimary },
   kpiLabel: { fontSize: 12, color: Colors.textSecondary, fontFamily: 'Poppins_500Medium', marginTop: 2 },
   sectionTitle: { ...Typography.subtitle, color: Colors.textPrimary, marginBottom: Spacing.sm },
   actionsRow: { flexDirection: 'row', gap: 12 },

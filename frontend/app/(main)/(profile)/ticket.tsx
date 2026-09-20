@@ -1,183 +1,290 @@
-import React, { useEffect, useState, useRef } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, Alert, KeyboardAvoidingView, Platform,
-  ActivityIndicator
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { supportService } from '../../../src/services/api';
-import { SupportTicket, TicketMessage } from '../../../src/models/types';
+import Screen from '../../../src/components/ui/Screen';
+import IconButton from '../../../src/components/ui/IconButton';
 import StatusBadge from '../../../src/components/ui/StatusBadge';
+import EmptyState from '../../../src/components/ui/EmptyState';
+import PressableScale from '../../../src/components/ui/PressableScale';
+import { supportService } from '../../../src/services/api';
+import { SupportTicket } from '../../../src/models/types';
 import { Colors } from '../../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../../src/constants/spacing';
+import { Elevation, Font, Radius, Spacing, Type } from '../../../src/constants/theme';
 
-function formatDate(d?: string) {
-  if (!d) return '—';
-  return new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ' · ' +
-    new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+function formatTime(value?: string) {
+  if (!value) return '—';
+  return new Date(value).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDay(value?: string) {
+  if (!value) return '';
+  return new Date(value).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 export default function TicketScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [ticket, setTicket] = useState<SupportTicket | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    if (id) {
-      supportService.getTicket(id)
-        .then(res => setTicket(res.data))
-        .catch(() => Alert.alert('Erreur', 'Ticket introuvable'))
-        .finally(() => setLoading(false));
-    }
+    if (!id) return;
+    supportService
+      .getTicket(id)
+      .then((res) => setTicket(res.data as SupportTicket))
+      .catch(() => setTicket(null))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  const handleSend = async () => {
-    if (!message.trim()) return;
+  const send = async () => {
+    if (!message.trim() || !id) return;
     setSending(true);
     try {
-      const res = await supportService.addMessage(id!, message.trim());
-      setTicket(res.data);
+      const res = await supportService.addMessage(id, message.trim());
+      setTicket(res.data as SupportTicket);
       setMessage('');
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (err: any) {
-      Alert.alert('Erreur', err.message);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+    } catch (err) {
+      Alert.alert('Erreur', err instanceof Error ? err.message : 'Envoi impossible');
     } finally {
       setSending(false);
     }
   };
 
-  const handleClose = () => {
-    Alert.alert('Fermer le ticket ?', 'Ce ticket sera marqué comme résolu.',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Fermer', onPress: async () => {
+  const closeTicket = () =>
+    Alert.alert('Fermer la conversation ?', 'Le ticket sera marqué comme résolu.', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Fermer',
+        onPress: async () => {
+          if (!id) return;
           try {
-            const res = await supportService.closeTicket(id!);
-            setTicket(res.data);
-          } catch { Alert.alert('Erreur', 'Impossible de fermer'); }
-        }}
-      ]
+            const res = await supportService.closeTicket(id);
+            setTicket((res.data as SupportTicket) ?? ticket);
+          } catch {
+            Alert.alert('Erreur', 'Fermeture impossible');
+          }
+        },
+      },
+    ]);
+
+  if (loading) {
+    return (
+      <Screen>
+        <ActivityIndicator color={Colors.primary} style={{ marginTop: Spacing.xl }} />
+      </Screen>
     );
-  };
+  }
 
-  if (loading) return (
-    <SafeAreaView style={styles.safe}>
-      <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
-    </SafeAreaView>
-  );
+  if (!ticket) {
+    return (
+      <Screen>
+        <EmptyState
+          icon="chatbubbles-outline"
+          title="Conversation introuvable"
+          description="Ce ticket n’est plus disponible."
+          actionLabel="Retour au support"
+          onAction={() => router.replace('/(main)/(profile)/support' as never)}
+        />
+      </Screen>
+    );
+  }
 
-  if (!ticket) return null;
-
-  const canReply = ticket.status !== 'closed' && ticket.status !== 'resolved';
+  const isClosed = ticket.status === 'closed' || ticket.status === 'resolved';
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.ticketNum}>{ticket.ticketNumber}</Text>
-            <Text style={styles.ticketSubject} numberOfLines={1}>{ticket.subject}</Text>
-          </View>
-          <StatusBadge status={ticket.status} small />
+    <Screen padded={false}>
+      <View style={styles.header}>
+        <IconButton name="arrow-back" onPress={() => router.back()} accessibilityLabel="Retour" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title} numberOfLines={1}>
+            {ticket.subject}
+          </Text>
+          <Text style={styles.subtitle}>
+            {ticket.ticketNumber} · ouvert le {formatDay(ticket.createdAt)}
+          </Text>
         </View>
+        <StatusBadge status={ticket.status} small />
+      </View>
 
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={ticket.messages}
-          keyExtractor={(_, idx) => idx.toString()}
-          contentContainerStyle={styles.messages}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          renderItem={({ item }: { item: TicketMessage }) => {
-            const isCustomer = item.sender === 'customer';
-            return (
-              <View style={[styles.bubble, isCustomer ? styles.bubbleRight : styles.bubbleLeft]}>
-                {!isCustomer && (
-                  <View style={styles.supportAvatar}>
-                    <Ionicons name="headset-outline" size={14} color={Colors.primary} />
-                  </View>
-                )}
-                <View style={[styles.bubbleContent, isCustomer ? styles.bubbleContentRight : styles.bubbleContentLeft]}>
-                  <Text style={[styles.bubbleText, isCustomer && { color: Colors.textInverse }]}>{item.message}</Text>
-                  <Text style={[styles.bubbleTime, isCustomer && { color: Colors.primaryPale }]}>{formatDate(item.createdAt)}</Text>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.messages} showsVerticalScrollIndicator={false}>
+        {ticket.messages.map((item, index) => {
+          const mine = item.sender === 'customer';
+          return (
+            <View
+              key={`${item.createdAt}-${index}`}
+              style={[styles.bubbleRow, mine && styles.bubbleRowMine]}
+            >
+              {!mine ? (
+                <View style={styles.supportAvatar}>
+                  <Ionicons name="sparkles" size={13} color={Colors.textInverse} />
                 </View>
+              ) : null}
+              <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleSupport]}>
+                <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{item.message}</Text>
+                <Text style={[styles.bubbleTime, mine && styles.bubbleTimeMine]}>
+                  {formatTime(item.createdAt)}
+                </Text>
               </View>
-            );
-          }}
-        />
+            </View>
+          );
+        })}
 
-        {/* Input or closed */}
-        {canReply ? (
-          <View style={styles.inputRow}>
+        {isClosed ? (
+          <View style={styles.closedNote}>
+            <Ionicons name="checkmark-circle" size={15} color={Colors.success} />
+            <Text style={styles.closedText}>
+              Conversation résolue. Ouvrez un nouveau message si besoin.
+            </Text>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      {!isClosed ? (
+        <View style={styles.composer}>
+          <View style={styles.inputWrap}>
             <TextInput
-              style={styles.textInput}
+              testID="ticket-message-input"
               value={message}
               onChangeText={setMessage}
-              placeholder="Répondre..."
+              placeholder="Écrire votre réponse…"
               placeholderTextColor={Colors.textPlaceholder}
+              style={styles.input}
               multiline
             />
-            <TouchableOpacity
-              style={[styles.sendBtn, !message.trim() && { opacity: 0.5 }]}
-              onPress={handleSend}
-              disabled={!message.trim() || sending}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color={Colors.textInverse} />
-              ) : (
-                <Ionicons name="send" size={18} color={Colors.textInverse} />
-              )}
-            </TouchableOpacity>
+            <PressableScale onPress={() => void closeTicket()} style={styles.closeTicket} scaleTo={0.94}>
+              <Text style={styles.closeTicketText}>Résolu</Text>
+            </PressableScale>
           </View>
-        ) : (
-          <View style={styles.closedBanner}>
-            <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
-            <Text style={styles.closedText}>Ticket résolu — {ticket.satisfactionRating ? `Note : ${ticket.satisfactionRating}/5 ⭐` : ''}</Text>
-          </View>
-        )}
-
-        {/* Close ticket action */}
-        {canReply && (
-          <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
-            <Text style={styles.closeBtnText}>Marquer comme résolu</Text>
-          </TouchableOpacity>
-        )}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          <PressableScale
+            testID="ticket-send-btn"
+            onPress={() => void send()}
+            disabled={sending || !message.trim()}
+            style={[styles.send, (!message.trim() || sending) && styles.sendDisabled]}
+            scaleTo={0.94}
+          >
+            {sending ? (
+              <ActivityIndicator color={Colors.textInverse} size="small" />
+            ) : (
+              <Ionicons name="arrow-up" size={18} color={Colors.textInverse} />
+            )}
+          </PressableScale>
+        </View>
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: 10, borderBottomWidth: 1, borderBottomColor: Colors.borderLight, backgroundColor: Colors.surface },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
-  ticketNum: { fontSize: 11, color: Colors.textTertiary, fontFamily: 'Poppins_500Medium' },
-  ticketSubject: { ...Typography.bodySmall, color: Colors.textPrimary, fontFamily: 'Poppins_600SemiBold' },
-  messages: { padding: Spacing.screen, paddingBottom: Spacing.md },
-  bubble: { flexDirection: 'row', marginBottom: Spacing.sm, alignItems: 'flex-end' },
-  bubbleRight: { justifyContent: 'flex-end' },
-  bubbleLeft: { justifyContent: 'flex-start' },
-  supportAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center', marginRight: 8, marginBottom: 4 },
-  bubbleContent: { maxWidth: '75%', borderRadius: 16, padding: 12 },
-  bubbleContentRight: { backgroundColor: Colors.primary, borderBottomRightRadius: 4 },
-  bubbleContentLeft: { backgroundColor: Colors.surface, borderBottomLeftRadius: 4, ...Shadow.card },
-  bubbleText: { fontSize: 14, color: Colors.textPrimary, lineHeight: 20 },
-  bubbleTime: { fontSize: 10, color: Colors.textTertiary, marginTop: 4, textAlign: 'right' },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: Spacing.screen, paddingVertical: Spacing.sm, gap: 8, borderTopWidth: 1, borderTopColor: Colors.borderLight, backgroundColor: Colors.surface },
-  textInput: { flex: 1, backgroundColor: Colors.background, borderRadius: BorderRadius.xl, paddingHorizontal: 16, paddingVertical: 10, maxHeight: 100, ...Typography.body, color: Colors.textPrimary },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
-  closedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: Spacing.md, backgroundColor: Colors.successBg, margin: Spacing.screen, borderRadius: BorderRadius.md },
-  closedText: { fontSize: 13, color: Colors.success, fontFamily: 'Poppins_500Medium' },
-  closeBtn: { padding: Spacing.sm, alignItems: 'center' },
-  closeBtnText: { fontSize: 12, color: Colors.textTertiary, fontFamily: 'Poppins_500Medium' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: Spacing.screen,
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  title: { ...Type.h3, color: Colors.textPrimary },
+  subtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 1 },
+  messages: { padding: Spacing.screen, gap: 12, paddingBottom: 40 },
+  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  bubbleRowMine: { justifyContent: 'flex-end' },
+  supportAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubble: {
+    maxWidth: '78%',
+    borderRadius: Radius.xl,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  bubbleSupport: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    borderBottomLeftRadius: 6,
+    ...Elevation.xs,
+  },
+  bubbleMine: {
+    backgroundColor: Colors.primary,
+    borderBottomRightRadius: 6,
+  },
+  bubbleText: { ...Type.body, color: Colors.textPrimary },
+  bubbleTextMine: { color: Colors.textInverse },
+  bubbleTime: { fontFamily: Font.regular, fontSize: 10.5, color: Colors.textTertiary, alignSelf: 'flex-end' },
+  bubbleTimeMine: { color: 'rgba(255,255,255,0.75)' },
+  closedNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'center',
+    backgroundColor: Colors.successBg,
+    borderRadius: Radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: Spacing.md,
+  },
+  closedText: { ...Type.small, color: '#4F7A61' },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+  },
+  inputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  input: {
+    flex: 1,
+    fontFamily: Font.regular,
+    fontSize: 14,
+    color: Colors.textPrimary,
+    maxHeight: 90,
+    paddingVertical: 8,
+  },
+  closeTicket: {
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 10,
+    height: 30,
+    justifyContent: 'center',
+  },
+  closeTicketText: { fontFamily: Font.semibold, fontSize: 11.5, color: Colors.textSecondary },
+  send: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Elevation.brand,
+  },
+  sendDisabled: { backgroundColor: Colors.disabledBg, opacity: 0.8 },
 });

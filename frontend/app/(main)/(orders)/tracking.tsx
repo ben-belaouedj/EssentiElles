@@ -1,175 +1,273 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Screen from '../../../src/components/ui/Screen';
+import IconButton from '../../../src/components/ui/IconButton';
+import StatusBadge from '../../../src/components/ui/StatusBadge';
+import ProgressSteps, { ProgressStep } from '../../../src/components/ui/ProgressSteps';
+import EmptyState from '../../../src/components/ui/EmptyState';
+import AppBadge from '../../../src/components/ui/AppBadge';
+import PrimaryButton from '../../../src/components/ui/PrimaryButton';
 import { orderService } from '../../../src/services/api';
 import { Order } from '../../../src/models/types';
-import StatusBadge from '../../../src/components/ui/StatusBadge';
 import { Colors } from '../../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../../src/constants/spacing';
+import { Elevation, Font, Radius, Spacing, Type } from '../../../src/constants/theme';
 
-const STATUS_STEPS = ['confirmed', 'preparing', 'shipped', 'delivered'];
+const STEPS = [
+  { key: 'confirmed', label: 'Commande confirmée', icon: 'checkmark' as const },
+  { key: 'preparing', label: 'En préparation', icon: 'construct-outline' as const },
+  { key: 'shipped', label: 'Expédiée', icon: 'car-outline' as const },
+  { key: 'delivered', label: 'Livrée', icon: 'home-outline' as const },
+];
 
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('fr-FR', {
-    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+function formatDateTime(value?: string) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
 export default function TrackingScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (id) {
-      orderService.getById(id)
-        .then(res => setOrder(res.data))
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }
+    if (!id) return;
+    orderService
+      .getById(id)
+      .then((res) => setOrder(res.data as Order))
+      .catch(() => setOrder(null))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return (
-    <SafeAreaView style={styles.safe}>
-      <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
-    </SafeAreaView>
-  );
+  const steps: ProgressStep[] = useMemo(() => {
+    if (!order) return [];
+    const currentIndex = STEPS.findIndex((step) => step.key === order.status);
+    const timelineByStatus = new Map(order.timeline?.map((entry) => [entry.status, entry]) ?? []);
 
-  if (!order) return null;
+    return STEPS.map((step, index) => {
+      const entry = timelineByStatus.get(step.key);
+      const state: ProgressStep['state'] =
+        order.status === 'cancelled'
+          ? step.key === 'confirmed'
+            ? 'done'
+            : 'todo'
+          : index < currentIndex
+            ? 'done'
+            : index === currentIndex
+              ? 'current'
+              : 'todo';
+      return {
+        key: step.key,
+        label: step.label,
+        icon: step.icon,
+        date: entry ? formatDateTime(entry.date) : state === 'todo' ? 'À venir' : undefined,
+        description: entry?.description,
+        state,
+      };
+    });
+  }, [order]);
 
-  const currentIdx = STATUS_STEPS.indexOf(order.status);
+  if (loading) {
+    return (
+      <Screen>
+        <ActivityIndicator color={Colors.primary} style={{ marginTop: Spacing.xl }} />
+      </Screen>
+    );
+  }
 
-  const stepConfig: Record<string, { icon: string; label: string }> = {
-    confirmed:  { icon: 'checkmark-circle-outline', label: 'Confirmée' },
-    preparing:  { icon: 'construct-outline',         label: 'Préparation' },
-    shipped:    { icon: 'car-outline',               label: 'Expédiée' },
-    delivered:  { icon: 'home-outline',              label: 'Livrée' },
-  };
+  if (!order) {
+    return (
+      <Screen>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Commande introuvable"
+          description="Nous n’avons pas retrouvé cette commande."
+          actionLabel="Voir mes commandes"
+          onAction={() => router.replace('/(main)/(orders)/orders' as never)}
+        />
+      </Screen>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <Screen scroll tabBarSpace>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Suivi de commande</Text>
+        <IconButton name="arrow-back" onPress={() => router.back()} accessibilityLabel="Retour" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>{order.orderNumber}</Text>
+          <Text style={styles.subtitle}>Commandée le {formatDateTime(order.createdAt)}</Text>
+        </View>
         <StatusBadge status={order.status} small />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Order info */}
-        <View style={styles.card}>
-          <Text style={styles.orderNum}>{order.orderNumber}</Text>
-          <Text style={styles.orderDate}>Commandé le {formatDate(order.createdAt)}</Text>
-          {order.trackingNumber ? (
-            <View style={styles.row}>
-              <Ionicons name="barcode-outline" size={14} color={Colors.textTertiary} />
-              <Text style={styles.trackingNum}> {order.trackingNumber}</Text>
-            </View>
-          ) : null}
-          {order.estimatedDelivery ? (
-            <View style={styles.row}>
-              <Ionicons name="calendar-outline" size={14} color={Colors.primary} />
-              <Text style={styles.estimatedText}> Livraison estimée : {formatDate(order.estimatedDelivery)}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Progress */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Progression</Text>
-          <View style={styles.progressRow}>
-            {STATUS_STEPS.map((step, idx) => {
-              const done = idx <= currentIdx;
-              const current = idx === currentIdx;
-              const cfg = stepConfig[step];
-              return (
-                <View key={step} style={styles.stepWrap}>
-                  {idx > 0 && <View style={[styles.line, done && styles.lineDone]} />}
-                  <View style={[styles.dot, done && styles.dotDone, current && styles.dotCurrent]}>
-                    <Ionicons name={cfg.icon as any} size={16} color={done ? Colors.textInverse : Colors.textTertiary} />
-                  </View>
-                  <Text style={[styles.stepLabel, done && styles.stepLabelDone]}>{cfg.label}</Text>
-                </View>
-              );
-            })}
+      {/* Tracking card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardIcon}>
+            <Ionicons name="navigate" size={17} color={Colors.textInverse} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>
+              {order.status === 'delivered'
+                ? 'Colis livré'
+                : order.status === 'cancelled'
+                  ? 'Commande annulée'
+                  : 'Votre colis est en route'}
+            </Text>
+            <Text style={styles.cardSubtitle}>
+              {order.estimatedDelivery
+                ? `Livraison estimée le ${new Date(order.estimatedDelivery).toLocaleDateString('fr-FR', {
+                    day: 'numeric',
+                    month: 'long',
+                  })}`
+                : 'Nous vous préviendrons à chaque étape'}
+            </Text>
           </View>
         </View>
 
-        {/* Items */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Articles commandés</Text>
-          {order.items.map((item, idx) => (
-            <View key={idx} style={styles.itemRow}>
-              <Text style={styles.itemName} numberOfLines={1}>{item.productName}</Text>
-              <Text style={styles.itemQty}>×{item.quantity}</Text>
-              <Text style={styles.itemPrice}>{item.totalPrice.toFixed(2)} €</Text>
-            </View>
-          ))}
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>{order.total.toFixed(2)} €</Text>
+        {order.trackingNumber ? (
+          <View style={styles.trackingRow}>
+            <Text style={styles.trackingLabel}>Numéro de suivi</Text>
+            <Text style={styles.trackingValue}>{order.trackingNumber}</Text>
           </View>
-        </View>
+        ) : null}
+      </View>
 
-        {/* Timeline */}
-        {order.timeline && order.timeline.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Historique</Text>
-            {[...order.timeline].reverse().map((event, idx) => (
-              <View key={idx} style={styles.timelineItem}>
-                <View style={styles.timelineDot} />
-                {idx < order.timeline.length - 1 && <View style={styles.timelineLine} />}
-                <View style={styles.timelineContent}>
-                  <Text style={styles.timelineDesc}>{event.description}</Text>
-                  <Text style={styles.timelineDate}>{formatDate(event.date)}</Text>
-                </View>
-              </View>
-            ))}
+      {/* Timeline */}
+      <Text style={styles.sectionTitle}>Étapes de livraison</Text>
+      <View style={styles.timelineCard}>
+        <ProgressSteps steps={steps} />
+      </View>
+
+      {/* Items */}
+      <Text style={styles.sectionTitle}>Contenu du colis</Text>
+      <View style={styles.itemsCard}>
+        {order.items.map((item, index) => (
+          <View key={`${item.productId}-${index}`} style={[styles.itemRow, index > 0 && styles.itemRowBordered]}>
+            <View style={styles.itemIcon}>
+              <Ionicons name="cube-outline" size={16} color={Colors.primaryDark} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.itemName} numberOfLines={2}>
+                {item.productName}
+              </Text>
+              <Text style={styles.itemMeta}>
+                ×{item.quantity} · {item.unitPrice.toFixed(2)} € / unité
+              </Text>
+            </View>
+            <Text style={styles.itemTotal}>{item.totalPrice.toFixed(2)} €</Text>
           </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+        ))}
+
+        <View style={styles.itemsFooter}>
+          <Text style={styles.totalLabel}>Total payé</Text>
+          <Text style={styles.totalValue}>{order.total.toFixed(2)} €</Text>
+        </View>
+      </View>
+
+      <View style={styles.badges}>
+        <AppBadge
+          label={order.paymentStatus === 'paid' ? 'Paiement confirmé' : 'Paiement en attente'}
+          variant={order.paymentStatus === 'paid' ? 'success' : 'warning'}
+          icon="card-outline"
+        />
+        <AppBadge label="Livraison offerte" variant="sage" icon="cube-outline" />
+      </View>
+
+      <PrimaryButton
+        label="Besoin d’aide sur cette commande ?"
+        variant="ghost"
+        icon="chatbubbles-outline"
+        onPress={() => router.push('/(main)/(profile)/support' as never)}
+        style={{ marginTop: Spacing.lg }}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: 12 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center', ...Shadow.card },
-  headerTitle: { ...Typography.subtitle, color: Colors.textPrimary, flex: 1 },
-  content: { padding: Spacing.screen, paddingBottom: Spacing.xl },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: Spacing.md, ...Shadow.card },
-  orderNum: { ...Typography.subtitle, color: Colors.textPrimary, fontFamily: 'Poppins_700Bold' },
-  orderDate: { fontSize: 13, color: Colors.textSecondary, marginTop: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  trackingNum: { fontSize: 12, color: Colors.textTertiary },
-  estimatedText: { fontSize: 13, color: Colors.primary, fontFamily: 'Poppins_500Medium' },
-  sectionTitle: { ...Typography.subtitle, color: Colors.textPrimary, marginBottom: Spacing.md },
-  progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  stepWrap: { alignItems: 'center', flex: 1, position: 'relative' },
-  line: { position: 'absolute', top: 18, right: '50%', width: '100%', height: 2, backgroundColor: Colors.borderMedium, zIndex: 0 },
-  lineDone: { backgroundColor: Colors.success },
-  dot: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.borderMedium, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  dotDone: { backgroundColor: Colors.success },
-  dotCurrent: { backgroundColor: Colors.primary },
-  stepLabel: { fontSize: 10, color: Colors.textTertiary, marginTop: 4, textAlign: 'center' },
-  stepLabelDone: { color: Colors.success, fontFamily: 'Poppins_500Medium' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
-  itemName: { flex: 1, fontSize: 13, color: Colors.textPrimary },
-  itemQty: { fontSize: 13, color: Colors.textSecondary, marginRight: 12 },
-  itemPrice: { fontSize: 13, color: Colors.primary, fontFamily: 'Poppins_600SemiBold' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8 },
-  totalLabel: { ...Typography.subtitle, color: Colors.textPrimary },
-  totalValue: { ...Typography.h4, color: Colors.primary },
-  timelineItem: { flexDirection: 'row', marginBottom: Spacing.sm, position: 'relative' },
-  timelineDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary, marginTop: 5, marginRight: 12, zIndex: 1 },
-  timelineLine: { position: 'absolute', left: 4, top: 15, width: 2, height: 40, backgroundColor: Colors.borderLight },
-  timelineContent: { flex: 1 },
-  timelineDesc: { fontSize: 13, color: Colors.textPrimary, fontFamily: 'Poppins_500Medium' },
-  timelineDate: { fontSize: 11, color: Colors.textTertiary, marginTop: 2 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: Spacing.lg },
+  title: { ...Type.h2, color: Colors.textPrimary },
+  subtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 1 },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    ...Elevation.sm,
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTitle: { ...Type.bodyStrong, color: Colors.textPrimary },
+  cardSubtitle: { ...Type.small, color: Colors.textSecondary, marginTop: 1 },
+  trackingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: Radius.lg,
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.md,
+  },
+  trackingLabel: { ...Type.small, color: Colors.textSecondary },
+  trackingValue: { fontFamily: Font.semibold, fontSize: 13, color: Colors.textPrimary },
+  sectionTitle: { ...Type.h3, color: Colors.textPrimary, marginTop: Spacing.xl, marginBottom: Spacing.sm },
+  timelineCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    ...Elevation.xs,
+  },
+  itemsCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    ...Elevation.xs,
+  },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  itemRowBordered: { borderTopWidth: 1, borderTopColor: Colors.borderLight },
+  itemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: Colors.primaryPale,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemName: { ...Type.bodyStrong, color: Colors.textPrimary },
+  itemMeta: { ...Type.small, color: Colors.textSecondary, marginTop: 2 },
+  itemTotal: { ...Type.bodyStrong, color: Colors.textPrimary },
+  itemsFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  totalLabel: { ...Type.bodyStrong, color: Colors.textPrimary },
+  totalValue: { ...Type.h3, color: Colors.textPrimary },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.md },
 });

@@ -991,6 +991,69 @@ async def resume_subscription(
     return serialize_doc(sub)
 
 
+@api_router.post("/subscriptions/{sub_id}/skip")
+async def skip_next_delivery(
+    sub_id: str, current_user: dict = Depends(get_current_user)
+):
+    """Skip the upcoming box: postpone the next delivery by one frequency cycle."""
+    try:
+        sub = await db.subscriptions.find_one(
+            {"_id": ObjectId(sub_id), "userId": current_user["id"]}
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    if not sub:
+        raise HTTPException(status_code=404, detail="Abonnement introuvable")
+    if sub.get("status") != "active":
+        raise HTTPException(
+            status_code=400, detail="Seul un abonnement actif peut être reporté"
+        )
+
+    days = FREQ_DAYS.get(sub.get("frequency", "monthly"), 30)
+    base = sub.get("nextDeliveryDate") or datetime.now(timezone.utc)
+    if isinstance(base, str):
+        try:
+            base = datetime.fromisoformat(base)
+        except ValueError:
+            base = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    next_delivery = base + timedelta(days=days)
+
+    await db.subscriptions.update_one(
+        {"_id": ObjectId(sub_id), "userId": current_user["id"]},
+        {
+            "$set": {"nextDeliveryDate": next_delivery, "updatedAt": now},
+            "$inc": {"skippedDeliveries": 1},
+        },
+    )
+    await db.notifications.insert_one(
+        {
+            "userId": current_user["id"],
+            "type": "subscription",
+            "title": "Livraison reportée",
+            "body": (
+                "Votre prochaine livraison a été reportée au "
+                f"{next_delivery.strftime('%d/%m/%Y')}."
+            ),
+            "isRead": False,
+            "createdAt": now,
+        }
+    )
+
+    updated = await db.subscriptions.find_one({"_id": ObjectId(sub_id)})
+    data = serialize_doc(updated)
+    if updated.get("productId"):
+        try:
+            product = await db.products.find_one(
+                {"_id": ObjectId(updated["productId"])}
+            )
+            if product:
+                data["product"] = serialize_doc(product)
+        except Exception:
+            pass
+    return data
+
+
 @api_router.delete("/subscriptions/{sub_id}")
 async def cancel_subscription(
     sub_id: str, current_user: dict = Depends(get_current_user)
@@ -2328,7 +2391,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(SecurityHeadersMiddleware)
+# Allow iframe embedding only for same-origin in production; open it up
+# outside production so the live preview / web wrappers keep working.
+FRAME_ANCESTORS = "'self'" if IS_PRODUCTION else "'self' http: https:"
+app.add_middleware(SecurityHeadersMiddleware, frame_ancestors=FRAME_ANCESTORS)
 app.add_middleware(RequestLoggingMiddleware)
 if RATE_LIMIT_PER_MINUTE > 0:
     app.add_middleware(RateLimitMiddleware, requests_per_minute=RATE_LIMIT_PER_MINUTE)

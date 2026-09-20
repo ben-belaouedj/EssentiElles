@@ -1,21 +1,34 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Alert, ScrollView, RefreshControl, ActivityIndicator
-} from 'react-native';
+import { View, Text, StyleSheet, Alert, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { adminService } from '../../src/services/api';
 import { Order } from '../../src/models/types';
 import { Colors } from '../../src/constants/colors';
-import { Typography, Spacing, BorderRadius, Shadow } from '../../src/constants/spacing';
+import { Radius, Spacing } from '../../src/constants/spacing';
+import { Elevation, Font, Type } from '../../src/constants/theme';
 import StatusBadge from '../../src/components/ui/StatusBadge';
+import Screen from '../../src/components/ui/Screen';
+import { Chip, ChipRow } from '../../src/components/ui/Chip';
+import IconButton from '../../src/components/ui/IconButton';
+import PressableScale from '../../src/components/ui/PressableScale';
+import { SkeletonListItem } from '../../src/components/ui/SkeletonCard';
+import EmptyState from '../../src/components/ui/EmptyState';
 
 const ORDER_STATUSES = [
-  { key: 'confirmed', label: 'Confirmée', color: Colors.info },
-  { key: 'preparing', label: 'Préparation', color: Colors.warning },
-  { key: 'shipped', label: 'Expédiée', color: Colors.primary },
-  { key: 'delivered', label: 'Livrée', color: Colors.success },
-  { key: 'cancelled', label: 'Annulée', color: Colors.error },
+  { key: 'confirmed', label: 'Confirmée' },
+  { key: 'preparing', label: 'Préparation' },
+  { key: 'shipped', label: 'Expédiée' },
+  { key: 'delivered', label: 'Livrée' },
+  { key: 'cancelled', label: 'Annulée' },
+];
+
+const FILTERS = [
+  { key: 'all', label: 'Toutes' },
+  { key: 'confirmed', label: 'Confirmées' },
+  { key: 'preparing', label: 'Préparation' },
+  { key: 'shipped', label: 'Expédiées' },
+  { key: 'delivered', label: 'Livrées' },
+  { key: 'cancelled', label: 'Annulées' },
 ];
 
 function formatDate(d?: string) {
@@ -45,7 +58,7 @@ export default function AdminOrders() {
         try {
           await adminService.updateOrderStatus(order.id, s.key);
           load();
-          Alert.alert('✓', `Statut mis à jour: ${s.label}`);
+          Alert.alert('✓', `Statut mis à jour : ${s.label}`);
         } catch { Alert.alert('Erreur', 'Impossible de mettre à jour'); }
       },
     }));
@@ -56,93 +69,118 @@ export default function AdminOrders() {
     );
   };
 
-  const filterOptions = ['all', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled'];
-  const filterLabels: Record<string, string> = {
-    all: 'Toutes', confirmed: 'Confirmées', preparing: 'Préparation',
-    shipped: 'Expédiées', delivered: 'Livrées', cancelled: 'Annulées',
-  };
   const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter);
 
   return (
-    <View style={styles.page}>
+    <Screen
+      background="blush"
+      scroll
+      tabBarSpace
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => { setRefreshing(true); load(); }}
+          tintColor={Colors.primary}
+        />
+      }
+    >
       <View style={styles.header}>
-        <View>
-          <Text style={styles.pageTitle}>Gestion des commandes</Text>
-          <Text style={styles.pageSubtitle}>{orders.length} commande(s) au total</Text>
-        </View>
+        <Text style={styles.pageTitle}>Commandes</Text>
+        <Text style={styles.pageSubtitle}>
+          {orders.length} commande{orders.length > 1 ? 's' : ''} au total
+        </Text>
       </View>
 
-      {/* Filter */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm }}>
-          {filterOptions.map(f => (
-            <TouchableOpacity
-              key={f}
-              style={[styles.chip, filter === f && styles.chipActive]}
-              onPress={() => setFilter(f)}
-            >
-              <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>{filterLabels[f]}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+      <ChipRow contentStyle={styles.chipRow}>
+        {FILTERS.map(f => (
+          <Chip
+            key={f.key}
+            label={f.label}
+            active={filter === f.key}
+            onPress={() => setFilter(f.key)}
+            count={f.key === 'all' ? orders.length : orders.filter(o => o.status === f.key).length}
+          />
+        ))}
+      </ChipRow>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.primary} />
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={Colors.primary} />
-          }
-          renderItem={({ item }) => (
-            <View style={styles.row}>
-              <View style={styles.rowLeft}>
-                <View style={styles.rowIcon}>
-                  <Ionicons name="bag-outline" size={20} color={Colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowName}>{item.orderNumber}</Text>
-                  <Text style={styles.rowSub}>{formatDate(item.createdAt)} — {item.items?.length} article(s)</Text>
-                  <Text style={styles.rowPrice}>{item.total.toFixed(2)} €</Text>
-                </View>
-              </View>
-              <View style={styles.rowActions}>
-                <StatusBadge status={item.status} small />
-                <TouchableOpacity
-                  style={styles.updateBtn}
-                  onPress={() => handleStatusUpdate(item)}
-                >
-                  <Ionicons name="swap-horizontal-outline" size={16} color={Colors.primary} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+        <View style={styles.skeletons}>
+          <SkeletonListItem />
+          <SkeletonListItem />
+          <SkeletonListItem />
+        </View>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon="bag-outline"
+          title="Aucune commande"
+          description="Les commandes clients apparaîtront ici."
         />
+      ) : (
+        <View style={styles.list}>
+          {filtered.map(item => (
+            <PressableScale key={item.id} style={styles.row} onPress={() => handleStatusUpdate(item)}>
+              <View style={styles.rowIcon}>
+                <Ionicons name="bag-handle-outline" size={19} color={Colors.primaryDark} />
+              </View>
+
+              <View style={styles.rowBody}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.rowName} numberOfLines={1}>{item.orderNumber}</Text>
+                  <StatusBadge status={item.status} small />
+                </View>
+                <Text style={styles.rowSub}>
+                  {formatDate(item.createdAt)} · {item.items?.length || 0} article{item.items?.length === 1 ? '' : 's'}
+                </Text>
+                <Text style={styles.rowPrice}>{(item.total || 0).toFixed(2)} €</Text>
+              </View>
+
+              <IconButton
+                name="swap-horizontal-outline"
+                variant="soft"
+                size={36}
+                color={Colors.primaryDark}
+                onPress={() => handleStatusUpdate(item)}
+                accessibilityLabel="Changer le statut"
+              />
+            </PressableScale>
+          ))}
+        </View>
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#F8F9FA' },
-  header: { padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.borderLight, backgroundColor: Colors.surface },
-  pageTitle: { ...Typography.h4, color: Colors.textPrimary },
-  pageSubtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
-  filterScroll: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
-  chip: { borderRadius: BorderRadius.pill, borderWidth: 1.5, borderColor: Colors.borderLight, paddingHorizontal: 12, paddingVertical: 6 },
-  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  chipText: { fontSize: 12, fontFamily: 'Poppins_500Medium', color: Colors.textSecondary },
-  chipTextActive: { color: Colors.textInverse },
-  list: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: 8, ...Shadow.card },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
-  rowIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  rowName: { fontSize: 14, fontFamily: 'Poppins_600SemiBold', color: Colors.textPrimary },
-  rowSub: { fontSize: 12, color: Colors.textTertiary, marginTop: 2 },
-  rowPrice: { fontSize: 13, color: Colors.primary, fontFamily: 'Poppins_600SemiBold', marginTop: 2 },
-  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  updateBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.primaryPale, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingBottom: Spacing.xxl },
+  header: { paddingTop: Spacing.md, paddingBottom: Spacing.lg },
+  pageTitle: { ...Type.display, color: Colors.textPrimary },
+  pageSubtitle: { ...Type.body, color: Colors.textSecondary, marginTop: 4 },
+  chipRow: { paddingBottom: Spacing.lg, gap: 8 },
+  skeletons: { gap: 10 },
+  list: { gap: 10 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    ...Elevation.sm,
+  },
+  rowIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryPale,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowBody: { flex: 1 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  rowName: { ...Type.h3, color: Colors.textPrimary, flexShrink: 1 },
+  rowSub: { ...Type.small, color: Colors.textTertiary, marginTop: 3 },
+  rowPrice: { fontFamily: Font.semibold, fontSize: 13.5, color: Colors.primaryDark, marginTop: 3 },
 });

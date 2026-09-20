@@ -109,25 +109,39 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
-    Add security headers to all responses
+    Add security headers to all responses.
+
+    `FRAME_ANCESTORS` controls who may embed the app:
+      - production default: 'self' (clickjacking protection)
+      - development/preview: 'self' + any origin, so the live preview iframe
+        and mobile-web wrappers keep working.
     """
+
+    def __init__(self, app, frame_ancestors: str = "'self'"):
+        super().__init__(app)
+        self.frame_ancestors = frame_ancestors
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
 
         # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Strict-Transport-Security"] = (
             "max-age=31536000; includeSubDomains"
         )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "img-src 'self' data: https:; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline';"
+            "img-src 'self' data: blob: https:; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "font-src 'self' data:; "
+            "connect-src 'self' https:; "
+            f"frame-ancestors {self.frame_ancestors};"
         )
+        # X-Frame-Options is superseded by CSP frame-ancestors and blocks
+        # legitimate embedding (preview iframes) — only allow same-origin.
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
 
         return response
 
